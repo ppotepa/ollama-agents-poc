@@ -2,8 +2,45 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+    def stream(self, prompt: str, on_token):  # type: ignore[override]
+        if not self._loaded:
+            self.load()
+        if not LANGCHAIN_AVAILABLE or self._llm is None:
+            return super().stream(prompt, on_token)
+        final_tokens: List[str] = []
+        try:
+            for chunk in self._llm.stream(prompt):  # type: ignore[attr-defined]
+                text = getattr(chunk, "content", None) or str(chunk)
+                if text:
+                    on_token(text)
+                    final_tokens.append(text)
+        except Exception as e:
+            stream_text(f"❌ Streaming error: {e}")
+            return ""
+        return "".join(final_tokens)
+    
+    def stream_with_context(self, prompt: str, on_token, context: Dict[str, Any]):
+        """Stream response with additional context from interceptor."""
+        if context and 'interceptor_analysis' in context:
+            interceptor_data = context['interceptor_analysis']
+            
+            # Create enhanced prompt with interceptor context
+            enhanced_prompt = f"""INTERCEPTOR ANALYSIS:
+Intent: {interceptor_data['detected_intent']} (confidence: {interceptor_data['confidence']:.2%})
+Commands executed: {interceptor_data['execution_stats']['total_commands']} 
+Successful commands: {interceptor_data['execution_stats']['successful_commands']}
+Data gathered: {interceptor_data['execution_stats']['total_data_gathered']} chars
+Context types: {', '.join(interceptor_data['context_types'])}
 
-from src.agents.base.base_agent import AbstractAgent
+COMMAND EXECUTION DETAILS:
+{chr(10).join([f"- {cmd['command']}: {'✅' if cmd['success'] else '❌'} ({cmd['duration']:.3f}s, {cmd['result_length']} chars)" for cmd in interceptor_data['commands_executed']])}
+
+USER QUERY:
+{prompt}"""
+            
+            return self.stream(enhanced_prompt, on_token)
+        else:
+            return self.stream(prompt, on_token)s.base.base_agent import AbstractAgent
 from src.utils.animations import stream_text
 
 try:  # LangChain optional
@@ -158,6 +195,29 @@ Always use these tools before asking the user for information that might be avai
             stream_text(f"❌ Streaming error: {e}")
             return ""
         return "".join(final_tokens)
+    
+    def stream_with_context(self, prompt: str, on_token, context: Dict[str, Any]):
+        """Stream response with additional context from interceptor."""
+        if context and 'interceptor_analysis' in context:
+            interceptor_data = context['interceptor_analysis']
+            
+            # Create enhanced prompt with interceptor context
+            enhanced_prompt = f"""INTERCEPTOR ANALYSIS:
+Intent: {interceptor_data['detected_intent']} (confidence: {interceptor_data['confidence']:.2%})
+Commands executed: {interceptor_data['execution_stats']['total_commands']} 
+Successful commands: {interceptor_data['execution_stats']['successful_commands']}
+Data gathered: {interceptor_data['execution_stats']['total_data_gathered']} chars
+Context types: {', '.join(interceptor_data['context_types'])}
+
+COMMAND EXECUTION DETAILS:
+{chr(10).join([f"- {cmd['command']}: {'✅' if cmd['success'] else '❌'} ({cmd['duration']:.3f}s, {cmd['result_length']} chars)" for cmd in interceptor_data['commands_executed']])}
+
+USER QUERY:
+{prompt}"""
+            
+            return self.stream(enhanced_prompt, on_token)
+        else:
+            return self.stream(prompt, on_token)
 
 
 def create_agent(agent_id: str, config: Dict[str, Any]) -> DeepCoderAgent:

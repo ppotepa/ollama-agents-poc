@@ -482,13 +482,13 @@ class PromptInterceptor:
             original_prompt=prompt,
             supplemented_prompt=enhanced_prompt,
             context_used=list(context_data.keys()) if context_data else [],
-            commands_executed=[],
+            commands_executed=command_executions,
             metadata={
                 "mode": "lightweight",
                 "detected_intent": context.detected_intent,
                 "confidence": context.confidence,
                 "context_types": list(context_data.keys()),
-                "execution_time": 0.001  # Very fast
+                "execution_time": sum(cmd.duration for cmd in command_executions)
             }
         )
     
@@ -887,24 +887,30 @@ class PromptInterceptor:
             return None
     
     def _execute_list_files(self) -> str:
-        """Execute file listing in current directory."""
+        """Execute file listing in current directory with detailed information."""
         try:
-            import os
-            files = os.listdir(".")
-            dirs = [f for f in files if os.path.isdir(f)]
-            files = [f for f in files if os.path.isfile(f)]
-            
-            result = []
-            if dirs:
-                result.append(f"Directories ({len(dirs)}): {', '.join(dirs)}")
-            
-            if files:
-                result.append(f"Files ({len(files)}): {', '.join(files)}")
-            
-            return "\n".join(result) if result else "No files or directories found"
+            # Import the enhanced list_files function
+            from src.tools.file_ops import list_files
+            return list_files(".", "*", detailed=True)
             
         except Exception as e:
-            return f"Error listing files: {e}"
+            # Fallback to simple listing
+            import os
+            try:
+                files = os.listdir(".")
+                dirs = [f for f in files if os.path.isdir(f)]
+                files = [f for f in files if os.path.isfile(f)]
+                
+                result = []
+                if dirs:
+                    result.append(f"Directories ({len(dirs)}): {', '.join(dirs)}")
+                
+                if files:
+                    result.append(f"Files ({len(files)}): {', '.join(files)}")
+                
+                return "\n".join(result) if result else "No files or directories found"
+            except Exception as fallback_e:
+                return f"Error listing files: {e} (fallback error: {fallback_e})"
     
     def _create_lightweight_prompt_with_results(self, original_prompt: str, context: PromptContext, 
                                                context_data: Dict[str, str], command_executions: List[CommandExecution]) -> str:

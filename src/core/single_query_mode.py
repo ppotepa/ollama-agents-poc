@@ -42,13 +42,38 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
                 print(f"📏 Enhanced query length: {len(enhanced_query)} characters")
                 print(f"🔤 First 200 chars: {enhanced_query}...")                
                 print()
+                
+                # Store interceptor data for agent context
+                interceptor_data = {
+                    'detected_intent': supplemented.metadata.get('detected_intent', 'Unknown'),
+                    'confidence': supplemented.metadata.get('confidence', 0),
+                    'context_types': supplemented.context_used,
+                    'commands_executed': [
+                        {
+                            'command': cmd.command_name,
+                            'duration': cmd.duration,
+                            'success': cmd.success,
+                            'result_length': cmd.result_length,
+                            'error': cmd.error_message
+                        }
+                        for cmd in supplemented.commands_executed
+                    ],
+                    'execution_stats': {
+                        'total_commands': len(supplemented.commands_executed),
+                        'successful_commands': len([cmd for cmd in supplemented.commands_executed if cmd.success]),
+                        'total_execution_time': sum(cmd.duration for cmd in supplemented.commands_executed),
+                        'total_data_gathered': sum(cmd.result_length for cmd in supplemented.commands_executed if cmd.success)
+                    }
+                }
             else:
                 enhanced_query = query
                 print(f"📝 No contextual enhancement applied")
+                interceptor_data = None
                 
         except Exception as e:
             print(f"⚠️  Prompt interception failed: {e}")
             enhanced_query = query
+            interceptor_data = None
         
         # Initialize connection mode
         from src.core.connection_modes import get_connection_mode
@@ -100,7 +125,7 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         # Fall back to agent-based processing
         if force_streaming:
             print(f"🎬 Forcing direct streaming connection...")
-            return run_single_query_direct_ollama(enhanced_query, agent_name)
+            return run_single_query_direct_ollama(enhanced_query, agent_name, interceptor_data)
         
         # Use server-based processing (default)
         print(f"🤖 Using server-based agent processing for enhanced query")
@@ -121,7 +146,8 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         print(f"❌ Error in run_single_query: {e}")
         # Use enhanced query if available, otherwise use original
         fallback_query = enhanced_query if 'enhanced_query' in locals() else query
-        return run_single_query_direct_ollama(fallback_query, agent_name)
+        fallback_interceptor_data = interceptor_data if 'interceptor_data' in locals() else None
+        return run_single_query_direct_ollama(fallback_query, agent_name, fallback_interceptor_data)
     finally:
         # Clean up connection
         if connection:
@@ -165,11 +191,21 @@ def query_via_server(query: str, agent_name: str, server_url: str) -> str:
         raise
 
 
-def run_single_query_direct_ollama(query: str, agent_name: str) -> str:
+def run_single_query_direct_ollama(query: str, agent_name: str, interceptor_data: dict = None) -> str:
     """Original direct Ollama connection as fallback."""
     try:
         print(f"🔄 Using direct Ollama connection for fallback")
         agent = get_agent_instance(agent_name)
+        
+        # Prepare agent context with interceptor data
+        agent_context = {}
+        if interceptor_data:
+            agent_context['interceptor_analysis'] = interceptor_data
+            print(f"🧠 Providing agent with interceptor data:")
+            print(f"   📊 Intent: {interceptor_data['detected_intent']} (confidence: {interceptor_data['confidence']:.2%})")
+            print(f"   🔧 Commands executed: {interceptor_data['execution_stats']['total_commands']}")
+            print(f"   ✅ Successful: {interceptor_data['execution_stats']['successful_commands']}")
+            print(f"   📈 Data gathered: {interceptor_data['execution_stats']['total_data_gathered']} chars")
         
         # Check if this is a sophisticated agent with streaming
         if hasattr(agent, 'stream') and callable(getattr(agent, 'stream')):
@@ -180,12 +216,19 @@ def run_single_query_direct_ollama(query: str, agent_name: str) -> str:
                 result_parts.append(token)
             
             print(f"🎬 Streaming response:")
-            agent.stream(query, collect_and_display_token)
+            # Pass interceptor context to streaming agent if supported
+            if interceptor_data and hasattr(agent, 'stream_with_context'):
+                agent.stream_with_context(query, collect_and_display_token, agent_context)
+            else:
+                agent.stream(query, collect_and_display_token)
             result = ''.join(result_parts)
             print(f"\n")  # Add newline after streaming
         else:
             # This is a simple agent
-            result = agent.run_query(query)
+            if interceptor_data and hasattr(agent, 'run_query_with_context'):
+                result = agent.run_query_with_context(query, agent_context)
+            else:
+                result = agent.run_query(query)
         
         print(f"🔍 Debug: Direct query completed, returning result")
         return result
