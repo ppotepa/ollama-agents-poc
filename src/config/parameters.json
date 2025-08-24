@@ -31,7 +31,7 @@
       "type": "str",
       "help": "Configuration directory path"
     },
-    "q": {
+    "-q": {
       "type": "str",
       "help": "Initial query for the agent (skips to chat)",
       "dest": "query",
@@ -42,7 +42,7 @@
       "help": "Initial query for the agent (skips to chat)",
       "dest": "query"
     },
-    "g": {
+    "-g": {
       "type": "str",
       "help": "Git repository URL (required for coding agents)",
       "dest": "git_repo",
@@ -53,12 +53,12 @@
       "help": "Git repository URL (required for coding agents)",
       "dest": "git_repo"
     },
-    "f": {
+    "-f": {
       "action": "store_true",
       "help": "Fast menus: skip tokenized output for menus",
       "dest": "fast"
     },
-    "fa": {
+    "-fa": {
       "action": "store_true",
       "help": "Fast all: disable tokenization & streaming everywhere",
       "dest": "fast_all"

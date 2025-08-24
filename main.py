@@ -3,13 +3,17 @@
 
 import sys
 import os
-from pathlib import Path
+
+# Get the absolute path to the script directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Add the src directory to Python path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+src_path = os.path.join(script_dir, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from config.arguments import get_parser, load_parameters
-from core.repository_validation import validate_repository_requirement
+from core.helpers import validate_repository_requirement
 from core.enums import AgentCapability
 
 
@@ -130,15 +134,15 @@ def main():
             git_url = args.g
         
         # Check if agent supports coding and enforce repository requirement
-        from core.repository_validation import check_agent_supports_coding
+        from core.helpers import check_agent_supports_coding
         agent_supports_coding = check_agent_supports_coding(args.agent)
         
-        # For command-line mode with query, require -g flag for coding agents
+        # For command-line mode with query, make repository optional for coding agents
         if hasattr(args, 'query') and args.query and agent_supports_coding and not git_url:
-            print(f"❌ Error: Agent '{args.agent}' is a coding agent and requires a git repository.")
-            print("   Please provide a git repository URL using the -g flag:")
+            print(f"💡 Info: Agent '{args.agent}' is a coding agent and works best with a git repository.")
+            print("   You can provide a git repository URL using the -g flag for enhanced functionality:")
             print("   Example: python main.py --agent deepcoder -g https://github.com/user/repo.git --query 'your question'")
-            sys.exit(1)
+            print("   Continuing without repository...\n")
         
         # For interactive mode with coding agents, we'll prompt for repository later
         
@@ -146,21 +150,27 @@ def main():
         try:
             # Use original working directory for data folder
             data_path = os.path.join(original_cwd, "data")
-            validation_passed, working_dir = validate_repository_requirement(args.agent, ".", git_url, data_path)
+            # Make repository optional for command-line queries with coding agents
+            is_command_line_query = hasattr(args, 'query') and args.query
+            optional_repo = is_command_line_query and agent_supports_coding and not git_url
+            validation_passed, working_dir = validate_repository_requirement(args.agent, ".", git_url, data_path, optional=optional_repo)
             if working_dir != ".":
                 print(f"✓ Repository cloned and validated: {working_dir}")
                 # Change to the cloned directory for the agent to work in
                 os.chdir(working_dir)
                 print(f"✓ Changed working directory to: {working_dir}")
             else:
-                print(f"✓ Repository validation passed for agent '{args.agent}'")
+                if optional_repo and agent_supports_coding:
+                    print(f"✓ Running agent '{args.agent}' without repository (optional mode)")
+                else:
+                    print(f"✓ Repository validation passed for agent '{args.agent}'")
         except ValueError as e:
             print(f"✗ Repository validation failed: {e}")
             sys.exit(1)
         
         # If git flag is provided, show repository info
         if hasattr(args, 'git') and args.git:
-            from core.repository_validation import get_repository_info
+            from core.helpers import get_repository_info
             repo_info = get_repository_info()
             if repo_info:
                 print(f"Repository info: {repo_info}")
@@ -185,12 +195,11 @@ def main():
         
         # Handle query mode (direct chat input)
         if hasattr(args, 'query') and args.query:
-            print(f"💬 Query mode: {args.query}")
-            # Start the agent with the initial query
-            from core.generic_interactive import run_single_query
+            # Start the agent with the initial query using single query mode
+            from core.single_query_mode import run_single_query
             try:
                 result = run_single_query(args.query, args.agent)
-                print(f"🤖 Agent response: {result}")
+                print(result)
             except Exception as e:
                 print(f"❌ Error running query: {e}")
                 if hasattr(args, 'verbose') and args.verbose:
@@ -201,7 +210,7 @@ def main():
             print(f"🔄 Interactive mode for agent: {args.agent}")
             
             # Start the generic interactive session (it will handle repository prompting internally)
-            from core.generic_interactive import run_interactive_session
+            from core.generic_interactive_mode import run_interactive_session
             try:
                 run_interactive_session(args.agent)
             except Exception as e:

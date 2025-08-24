@@ -1,8 +1,10 @@
-"""Generic interactive agent system that works with any agent."""
+"""Generic interactive agent system for interactive sessions."""
 
 import os
 import sys
 import traceback
+import threading
+import time
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -17,6 +19,77 @@ except Exception:
     AGENT_TYPE = "structured-chat-zero-shot-react-description"
 
 
+class BusyIndicator:
+    """Fancy loading indicator for interactive mode."""
+    
+    def __init__(self, message: str = "Awaiting response"):
+        self.message = message
+        self.is_running = False
+        self.thread = None
+    
+    def start(self):
+        """Start the loading animation."""
+        if self.is_running:
+            return
+        self.is_running = True
+        self.thread = threading.Thread(target=self._animate)
+        self.thread.daemon = True
+        self.thread.start()
+    
+    def stop(self):
+        """Stop the loading animation."""
+        if not self.is_running:
+            return
+        self.is_running = False
+        if self.thread:
+            self.thread.join(timeout=0.5)
+        # Clear the line and show completion
+        print(f"\r{' ' * (len(self.message) + 10)}\r", end='', flush=True)
+    
+    def _animate(self):
+        """Animation loop with increasing dots."""
+        dots = 0
+        while self.is_running:
+            dots_str = '.' * (dots % 4)  # 0 to 3 dots
+            spaces = ' ' * (3 - len(dots_str))  # Keep consistent width
+            print(f"\r💭 {self.message}{dots_str}{spaces}", end='', flush=True)
+            time.sleep(0.5)
+            dots += 1
+
+
+class LoadingIndicator:
+    """Fancy loading indicator with animated dots."""
+    
+    def __init__(self, message: str = "Awaiting response"):
+        self.message = message
+        self.is_running = False
+        self.thread = None
+        
+    def start(self):
+        """Start the loading animation."""
+        self.is_running = True
+        self.thread = threading.Thread(target=self._animate)
+        self.thread.daemon = True
+        self.thread.start()
+        
+    def stop(self):
+        """Stop the loading animation."""
+        self.is_running = False
+        if self.thread:
+            self.thread.join()
+        # Clear the line
+        print("\r" + " " * (len(self.message) + 10) + "\r", end="", flush=True)
+        
+    def _animate(self):
+        """Animate the loading dots."""
+        dots = 0
+        while self.is_running:
+            dots_str = "." * ((dots % 4) + 1)
+            print(f"\r🤖 {self.message}{dots_str:<4}", end="", flush=True)
+            time.sleep(0.5)
+            dots += 1
+
+
 class GenericInteractiveAgent:
     """Generic interactive agent that can work with any model configuration."""
     
@@ -25,8 +98,20 @@ class GenericInteractiveAgent:
         self.agent_name = agent_name
         self.agent = None
         self.model_config = None
-        self._load_agent_config()
-        self._setup_agent()
+        
+        # Show loading while initializing
+        loader = LoadingIndicator("Initializing agent")
+        loader.start()
+        
+        try:
+            self._load_agent_config()
+            self._setup_agent()
+            loader.stop()
+            print(f"✅ Agent '{agent_name}' ready!")
+        except Exception as e:
+            loader.stop()
+            print(f"❌ Failed to initialize agent: {e}")
+            raise
     
     def _load_agent_config(self):
         """Load agent configuration from YAML."""
@@ -228,6 +313,10 @@ class GenericInteractiveAgent:
     
     def _setup_agent(self):
         """Setup the LangChain agent with model and tools."""
+        # Start loading indicator for agent setup
+        setup_loader = BusyIndicator("Initializing agent")
+        setup_loader.start()
+        
         try:
             # Get model parameters
             model_id = getattr(self.model_config, 'model_id', self.agent_name)
@@ -270,7 +359,11 @@ class GenericInteractiveAgent:
                 agent_kwargs={"system_message": system_message},
             )
             
+            setup_loader.stop()
+            print("✅ Agent ready!")
+            
         except Exception as e:
+            setup_loader.stop()
             print(f"❌ Error setting up agent: {e}")
             raise
     
@@ -279,10 +372,16 @@ class GenericInteractiveAgent:
         if not self.agent:
             return "❌ Agent not initialized"
         
+        # Start loading indicator
+        loader = BusyIndicator("Awaiting response")
+        loader.start()
+        
         try:
             result = self.agent.invoke({"input": query})
+            loader.stop()
             return result.get("output", str(result))
         except Exception as e:
+            loader.stop()
             return f"❌ Error processing query: {e}"
     
     def run_interactive_session(self):
@@ -324,56 +423,50 @@ class GenericInteractiveAgent:
                     traceback.print_exc()
     
     def _handle_repository_setup(self):
-        """Handle repository setup for coding agents."""
+        """Handle repository setup for coding agents with repository selection."""
         try:
-            from core.repository_validation import validate_repository_requirement
+            from core.helpers import display_repository_selection, validate_repository_requirement
             
             print(f"🔍 Agent '{self.agent_name}' is a coding agent and works best with a repository.")
             
-            while True:
-                repo_url = input("📂 Please enter a git repository URL (or 'skip' to continue without): ").strip()
-                
-                if repo_url.lower() == 'skip':
+            # Show repository selection menu
+            selected_url = display_repository_selection()
+            
+            if selected_url:
+                try:
+                    original_cwd = os.getcwd()
+                    data_path = os.path.join(original_cwd, "data")
+                    
+                    # Show loading while setting up repository
+                    loader = LoadingIndicator("Setting up repository")
+                    loader.start()
+                    
+                    validation_passed, working_dir = validate_repository_requirement(
+                        self.agent_name, ".", selected_url, data_path
+                    )
+                    
+                    loader.stop()
+                    
+                    if working_dir != ".":
+                        print(f"✅ Repository cloned and validated: {working_dir}")
+                        os.chdir(working_dir)
+                        print(f"✅ Changed working directory to: {working_dir}")
+                    else:
+                        print(f"✅ Repository validation passed")
+                        
+                except Exception as e:
+                    if 'loader' in locals():
+                        loader.stop()
+                    print(f"❌ Error setting up repository: {e}")
                     print("⚠️  Continuing without repository - some features may be limited.\n")
-                    break
-                elif repo_url:
-                    try:
-                        original_cwd = os.getcwd()
-                        data_path = os.path.join(original_cwd, "data")
-                        
-                        print(f"🔄 Setting up repository: {repo_url}")
-                        validation_passed, working_dir = validate_repository_requirement(
-                            self.agent_name, ".", repo_url, data_path
-                        )
-                        
-                        if working_dir != ".":
-                            print(f"✓ Repository cloned and validated: {working_dir}")
-                            os.chdir(working_dir)
-                            print(f"✓ Changed working directory to: {working_dir}")
-                        else:
-                            print(f"✓ Repository validation passed")
-                        break
-                        
-                    except Exception as e:
-                        print(f"❌ Error setting up repository: {e}")
-                        continue
-                else:
-                    print("Please enter a valid git URL or 'skip'")
+            else:
+                print("⚠️  Continuing without repository - some features may be limited.\n")
                     
         except Exception as e:
             print(f"⚠️  Warning: Could not handle repository setup: {e}")
 
 
 # Public functions for main.py compatibility
-def run_single_query(query: str, agent_name: str) -> str:
-    """Run a single query against any agent."""
-    try:
-        agent = GenericInteractiveAgent(agent_name)
-        return agent.run_query(query)
-    except Exception as e:
-        return f"❌ Error initializing agent '{agent_name}': {e}"
-
-
 def run_interactive_session(agent_name: str):
     """Run an interactive session with any agent."""
     try:
@@ -392,4 +485,4 @@ if __name__ == "__main__":
         agent_name = sys.argv[1]
         run_interactive_session(agent_name)
     else:
-        print("Usage: python generic_interactive.py <agent_name>")
+        print("Usage: python generic_interactive_mode.py <agent_name>")

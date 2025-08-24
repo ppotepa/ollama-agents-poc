@@ -8,7 +8,7 @@ from pathlib import Path
 # Add the src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from core.repository_validation import check_agent_supports_coding, validate_repository_requirement
+from core.helpers import check_agent_supports_coding, validate_repository_requirement
 
 def test_agent_coding_detection():
     """Test that we can correctly identify coding agents."""
