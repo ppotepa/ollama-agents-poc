@@ -296,6 +296,11 @@ def healthz():
         "file": __file__,
     }
 
+@app.get("/health")
+def health():
+    """Simple health check endpoint for connection modes."""
+    return {"status": "ok", "version": VERSION}
+
 @app.get("/v1/integrations/health")
 def integrations_health():
     """Get health status of all integrations."""
@@ -409,6 +414,94 @@ def list_agents():
         "total": len(agent_data)
     }
 
+
+@app.post("/v1/agents/query")
+def agent_query(request: Dict[str, Any] = Body(...)):
+    """Direct agent query endpoint - our native implementation."""
+    try:
+        agent_name = request.get("agent", "deepcoder")
+        query = request.get("query", "")
+        
+        if not query:
+            return {"error": "Query is required", "status": "error"}
+        
+        print(f"🔍 Agent Query: Processing '{query}' with agent '{agent_name}'")
+        
+        # Check if this is a repository analysis query and tools are available
+        repo_keywords = ["repository", "repo", "structure", "analyze", "analysis", "files", "directories", "languages"]
+        is_repo_query = any(keyword in query.lower() for keyword in repo_keywords)
+        
+        if is_repo_query:
+            print(f"🔍 Detected repository analysis query, checking for context...")
+            try:
+                # Try to use repository context tools directly
+                import sys
+                import os
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+                from tools.context import get_repository_state, analyze_repository_context, analyze_repo_languages
+                
+                # Get repository state to see if context is loaded
+                repo_state = get_repository_state()
+                if "Total Files:" in repo_state and not repo_state.startswith("❌"):
+                    print(f"🧠 Repository context available, using tools")
+                    
+                    # Build comprehensive repository analysis
+                    context_analysis = analyze_repository_context()
+                    language_analysis = analyze_repo_languages()
+                    
+                    # Create enhanced prompt with repository data
+                    enhanced_query = f"""Based on the repository context data below, please analyze the repository structure:
+
+Repository Overview:
+{context_analysis}
+
+Programming Languages:
+{language_analysis}
+
+Repository State:
+{repo_state}
+
+Original question: {query}
+
+Please provide a comprehensive analysis based on this repository data."""
+                    
+                    query = enhanced_query
+                    print(f"🔧 Enhanced query with repository context data")
+                    
+            except Exception as e:
+                print(f"⚠️ Could not access repository context tools: {e}")
+        
+        # Import our agent system
+        from core.single_query_mode import run_single_query_direct_ollama
+        
+        # Use our agent system to process the query
+        result = run_single_query_direct_ollama(query, agent_name)
+        
+        if result and not result.startswith("❌"):
+            print(f"✅ Agent Query: Success ({len(result)} chars)")
+            return {
+                "status": "success",
+                "agent": agent_name,
+                "query": query,
+                "response": result,
+                "response_length": len(result)
+            }
+        else:
+            print(f"⚠️ Agent Query: Failed or error result")
+            return {
+                "status": "error",
+                "agent": agent_name,
+                "query": query,
+                "error": result
+            }
+            
+    except Exception as e:
+        print(f"❌ Agent Query: Exception: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 @app.get("/v1/capabilities")
 def capabilities():
     return {
@@ -447,7 +540,26 @@ def chat_completions(body: ChatRequest = Body(...)):
             return tool_response([tc], model)
         return text_response("I couldn't parse that tool call. Please provide filepath/contents/command as needed.", model)
 
-    # 2) If tools are enabled, emit helpful tool_calls based on simple intent
+    # 2) Try to process with actual agents first
+    try:
+        # Import our agent system
+        from core.single_query_mode import run_single_query_direct_ollama
+        
+        print(f"🔍 Server: Processing query '{user_prompt}' with agent '{model}'")
+        
+        # Use our agent system to process the query
+        result = run_single_query_direct_ollama(user_prompt, model)
+        
+        if result and not result.startswith("❌"):
+            print(f"✅ Server: Agent processed successfully ({len(result)} chars)")
+            return text_response(result, model)
+        else:
+            print(f"⚠️ Server: Agent processing failed or returned error")
+            
+    except Exception as e:
+        print(f"⚠️ Server: Agent processing error: {e}")
+    
+    # 3) If tools are enabled, emit helpful tool_calls based on simple intent
     if body.tools:
         low = user_prompt.lower()
 
@@ -476,7 +588,7 @@ def chat_completions(body: ChatRequest = Body(...)):
             })
         ], model)
 
-    # 3) No tools: plain text
+    # 4) Fallback: plain text with agent info
     return text_response("Agent mode is available. Enable tools to let me edit files or run commands.", model)
 
 # --------------------------------------------------------------------------------------

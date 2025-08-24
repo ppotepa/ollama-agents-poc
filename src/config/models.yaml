@@ -18,11 +18,29 @@ models:
       top_k: 40
       top_p: 0.9
     tools:
-      - file_ops
-      - system
-      - project
-      - code_execution
-      - web
+      # File operations
+      - write_file
+      - read_file
+      - append_file
+      - list_files
+      - delete_file
+      - copy_file
+      # Project operations
+      - create_project
+      - analyze_repository
+      - get_file_content_summary
+      # System operations
+      - get_system_info
+      # Code execution
+      - run_python
+      # Web operations
+      - fetch_url
+      - duck_search
+      # Repository context analysis
+      - analyze_repository_context
+      - analyze_repo_languages
+      - analyze_repo_directories
+      - get_repository_state
     system_message: |
       You are DeepCoder, an advanced AI coding assistant with comprehensive capabilities similar to GitHub Copilot.
       

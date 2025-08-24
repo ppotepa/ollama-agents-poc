@@ -6,6 +6,211 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 
+def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None) -> str:
+    """Run a single query with cognitive command interpretation and connection mode support."""
+    connection = None
+    try:
+        print(f"🔍 Debug: Starting run_single_query for agent '{agent_name}' with {connection_mode} mode")
+        
+        # **PROMPT INTERCEPTION**: Intercept and enhance the prompt with contextual information
+        print(f"🧠 Intercepting and analyzing prompt...")
+        from src.core.prompt_interceptor import intercept_and_enhance_prompt
+        
+        try:
+            supplemented = intercept_and_enhance_prompt(query, os.getcwd(), repository_url)
+            
+            # Show what was detected and enhanced
+            if supplemented.context_used:
+                print(f"🎯 Detected intent: {supplemented.metadata.get('detected_intent', 'Unknown')}")
+                print(f"📊 Confidence: {supplemented.metadata.get('confidence', 0):.2f}")
+                print(f"🔧 Context added: {', '.join(supplemented.context_used)}")
+                
+                # Use the supplemented prompt instead of the original
+                enhanced_query = supplemented.supplemented_prompt
+                print(f"✨ Prompt enhanced with contextual information")
+            else:
+                enhanced_query = query
+                print(f"📝 No contextual enhancement applied")
+                
+        except Exception as e:
+            print(f"⚠️  Prompt interception failed: {e}")
+            enhanced_query = query
+        
+        # Initialize connection mode
+        from src.core.connection_modes import get_connection_mode
+        
+        connection_config = {
+            'server_url': 'http://localhost:8000',
+            'ollama_url': 'http://localhost:11434',
+            'temp_server_port': 8001,
+            'startup_timeout': 15
+        }
+        
+        connection = get_connection_mode(connection_mode, connection_config)
+        
+        # Try to establish connection
+        if not connection.connect():
+            print(f"❌ Failed to establish {connection_mode} connection")
+            # Fall back to direct Ollama connection
+            return run_single_query_direct_ollama(query, agent_name)
+        
+        print(f"✅ Connection established via {connection_mode} mode")
+        
+        # First, try to resolve the query using CommandResolver
+        from src.core.command_resolver import resolve_user_input
+        
+        print(f"🧠 Attempting cognitive command resolution...")
+        resolved_command = resolve_user_input(enhanced_query)
+        
+        if resolved_command:
+            print(f"🧠 Command resolved: {resolved_command.command_name} (confidence: {resolved_command.confidence:.2f})")
+            
+            if resolved_command.confidence >= 0.6:  # Lowered threshold for better coverage
+                print(f"📋 Description: {resolved_command.description}")
+                
+                # Try to execute the resolved command
+                try:
+                    result = execute_resolved_command(resolved_command, enhanced_query)
+                    if result:
+                        return result
+                except Exception as e:
+                    print(f"⚠️  Command execution failed, falling back to agent: {e}")
+            else:
+                print(f"⚠️  Confidence too low ({resolved_command.confidence:.2f}), falling back to agent")
+        else:
+            print(f"🧠 No command resolved, falling back to agent")
+        
+        # Fall back to agent-based processing via server
+        print(f"🤖 Using server-based agent processing for enhanced query")
+        
+        try:
+            # Use the server API for processing with enhanced query
+            result = query_via_server(enhanced_query, agent_name, connection.server_url)
+            if result:
+                return result
+        except Exception as e:
+            print(f"⚠️  Server-based processing failed: {e}")
+        
+        # Final fallback to direct Ollama with enhanced query
+        print(f"🔄 Falling back to direct Ollama connection...")
+        return run_single_query_direct_ollama(enhanced_query, agent_name)
+        
+    except Exception as e:
+        print(f"❌ Error in run_single_query: {e}")
+        # Use enhanced query if available, otherwise use original
+        fallback_query = enhanced_query if 'enhanced_query' in locals() else query
+        return run_single_query_direct_ollama(fallback_query, agent_name)
+    finally:
+        # Clean up connection
+        if connection:
+            connection.disconnect()
+
+
+def query_via_server(query: str, agent_name: str, server_url: str) -> str:
+    """Query the agent via our native server API."""
+    try:
+        import requests
+        
+        # Use our native agent query endpoint instead of chat completions
+        payload = {
+            "agent": agent_name,
+            "query": query
+        }
+        
+        endpoint = f"{server_url}/v1/agents/query"
+        print(f"🔍 Debug: Sending request to {endpoint}")
+        
+        response = requests.post(
+            endpoint,
+            json=payload,
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("status") == "success":
+                content = result.get("response", "")
+                print(f"✅ Server response received ({len(content)} chars)")
+                return content
+            else:
+                error_msg = result.get("error", "Unknown error")
+                raise Exception(f"Server returned error: {error_msg}")
+        else:
+            raise Exception(f"Server returned status {response.status_code}: {response.text}")
+    
+    except Exception as e:
+        print(f"❌ Server query failed: {e}")
+        raise
+
+
+def run_single_query_direct_ollama(query: str, agent_name: str) -> str:
+    """Original direct Ollama connection as fallback."""
+    try:
+        print(f"🔄 Using direct Ollama connection for fallback")
+        agent = get_agent_instance(agent_name)
+        
+        # Check if this is a sophisticated agent with streaming
+        if hasattr(agent, 'stream') and callable(getattr(agent, 'stream')):
+            # For single query mode, we'll collect the streamed response
+            result_parts = []
+            def collect_token(token):
+                result_parts.append(token)
+            
+            agent.stream(query, collect_token)
+            result = ''.join(result_parts)
+        else:
+            # This is a simple agent
+            result = agent.run_query(query)
+        
+        print(f"🔍 Debug: Direct query completed, returning result")
+        return result
+    except Exception as e:
+        print(f"🔍 Debug: Error in direct query: {e}")
+        return f"❌ Error processing query '{query}': {e}"
+
+
+def execute_resolved_command(resolved_command, original_query: str) -> Optional[str]:
+    """Execute a resolved command from the commands folder."""
+    try:
+        # Import the command module dynamically
+        command_module_path = f"src.commands.{resolved_command.command_name}"
+        
+        print(f"🔧 Attempting to load command module: {command_module_path}")
+        
+        # Check if the command directory exists
+        command_dir = Path(f"src/commands/{resolved_command.command_name}")
+        if not command_dir.exists():
+            print(f"📁 Command directory not found: {command_dir}")
+            return None
+        
+        # Try to import the command module
+        try:
+            import importlib
+            command_module = importlib.import_module(command_module_path)
+            
+            # Get the command class
+            command_class = getattr(command_module, resolved_command.command_class)
+            
+            # Instantiate and execute the command
+            command_instance = command_class()
+            result = command_instance.execute(original_query, resolved_command.parameters)
+            
+            return result
+            
+        except (ImportError, AttributeError) as e:
+            print(f"⚠️  Could not load command {resolved_command.command_name}: {e}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error executing command: {e}")
+        return None
+
+import os
+import sys
+from typing import Optional, Dict, Any
+from pathlib import Path
+
+
 def get_agent_instance(agent_name: str):
     """Get the appropriate agent instance based on the agent name."""
     try:
@@ -179,49 +384,3 @@ class SimpleQueryAgent:
         except Exception as e:
             print(f"🔍 Debug: Error in run_query: {e}")
             return f"❌ Error processing query: {e}"
-
-
-# Public functions for main.py
-def run_single_query(query: str, agent_name: str) -> str:
-    """Run a single query using the appropriate agent implementation."""
-    try:
-        print(f"🔍 Debug: Starting run_single_query for agent '{agent_name}'")
-        
-        # Get the appropriate agent instance
-        agent = get_agent_instance(agent_name)
-        
-        print(f"🔍 Debug: Agent initialized, running query...")
-        
-        # Use proper agent method based on type
-        if hasattr(agent, 'stream') and hasattr(agent, 'load'):
-            # This is a proper agent (like DeepCoderAgent)
-            agent.load()  # Load the agent
-            
-            # For single query mode, we'll collect the streamed response
-            result_parts = []
-            def collect_token(token):
-                result_parts.append(token)
-            
-            agent.stream(query, collect_token)
-            result = ''.join(result_parts)
-        else:
-            # This is a simple agent
-            result = agent.run_query(query)
-        
-        print(f"🔍 Debug: Query completed, returning result")
-        return result
-    except Exception as e:
-        print(f"🔍 Debug: Error in run_single_query: {e}")
-        return f"❌ Error initializing agent '{agent_name}': {e}"
-
-
-# Direct execution support
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 2:
-        agent_name = sys.argv[1]
-        query = sys.argv[2]
-        result = run_single_query(query, agent_name)
-        print(result)
-    else:
-        print("Usage: python single_query_mode.py <agent_name> <query>")

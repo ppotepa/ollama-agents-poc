@@ -3,9 +3,270 @@
 import os
 import subprocess
 import hashlib
+import urllib.request
+import zipfile
+import shutil
+import tempfile
+import re
+import json
+import requests
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
+from io import BytesIO
 from .enums import AgentCapability, Domain
+
+# Global ZIP cache and virtual directory storage
+_zip_cache = {}
+_virtual_directories = {}
+
+
+class VirtualRepository:
+    """In-memory representation of a repository extracted from ZIP."""
+    
+    def __init__(self, repo_url: str, zip_data: bytes):
+        self.repo_url = repo_url
+        self.zip_data = zip_data
+        self.files: Dict[str, bytes] = {}
+        self.directories: Dict[str, List[str]] = {}
+        self.metadata: Dict[str, Any] = {}
+        self._extract_to_memory()
+    
+    def _extract_to_memory(self):
+        """Extract ZIP contents to memory structures."""
+        try:
+            with zipfile.ZipFile(BytesIO(self.zip_data), 'r') as zip_ref:
+                # Get all file and directory paths
+                all_paths = zip_ref.namelist()
+                
+                # Process each path
+                for path in all_paths:
+                    if path.endswith('/'):
+                        # It's a directory
+                        dir_path = path.rstrip('/')
+                        self.directories[dir_path] = []
+                    else:
+                        # It's a file
+                        try:
+                            file_content = zip_ref.read(path)
+                            self.files[path] = file_content
+                            
+                            # Add to parent directory listing
+                            parent_dir = str(Path(path).parent)
+                            if parent_dir == '.':
+                                parent_dir = ''
+                            
+                            if parent_dir not in self.directories:
+                                self.directories[parent_dir] = []
+                            
+                            filename = Path(path).name
+                            if filename not in self.directories[parent_dir]:
+                                self.directories[parent_dir].append(filename)
+                                
+                        except Exception as e:
+                            print(f"⚠️  Could not read file {path}: {e}")
+                
+                # Store metadata
+                self.metadata = {
+                    'total_files': len(self.files),
+                    'total_directories': len(self.directories),
+                    'repo_url': self.repo_url,
+                    'zip_size': len(self.zip_data)
+                }
+                
+        except Exception as e:
+            print(f"❌ Error extracting ZIP to memory: {e}")
+            raise
+    
+    def get_file_content(self, path: str) -> Optional[bytes]:
+        """Get file content from memory."""
+        return self.files.get(path)
+    
+    def get_file_content_text(self, path: str, encoding: str = 'utf-8') -> Optional[str]:
+        """Get file content as text."""
+        content = self.get_file_content(path)
+        if content is None:
+            return None
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            return None
+    
+    def list_directory(self, path: str = '') -> List[str]:
+        """List contents of a directory."""
+        return self.directories.get(path, [])
+    
+    def file_exists(self, path: str) -> bool:
+        """Check if file exists in virtual repository."""
+        return path in self.files
+    
+    def directory_exists(self, path: str) -> bool:
+        """Check if directory exists in virtual repository."""
+        return path in self.directories
+    
+    def get_all_files(self) -> List[str]:
+        """Get list of all file paths."""
+        return list(self.files.keys())
+    
+    def get_all_directories(self) -> List[str]:
+        """Get list of all directory paths."""
+        return list(self.directories.keys())
+
+
+# Global cache for virtual repositories and persistent storage
+_virtual_repo_cache: Dict[str, VirtualRepository] = {}
+_zip_cache_dir = Path("./data/zip_cache")
+_zip_cache_dir.mkdir(exist_ok=True)
+
+
+def get_virtual_repository(repo_url: str) -> Optional[VirtualRepository]:
+    """Get cached virtual repository, loading from disk if needed."""
+    global _virtual_repo_cache
+    
+    # First check in-memory cache
+    if repo_url in _virtual_repo_cache:
+        return _virtual_repo_cache[repo_url]
+    
+    # Try loading from disk cache
+    github_info = parse_github_url(repo_url)
+    if github_info:
+        owner = github_info['owner']
+        repo = github_info['repo']
+        branch = github_info['branch']
+        cache_key = f"{owner}_{repo}_{branch}"
+        
+        zip_file_path = _zip_cache_dir / f"{cache_key}.zip"
+        if zip_file_path.exists():
+            try:
+                with open(zip_file_path, 'rb') as f:
+                    zip_data = f.read()
+                
+                # Create virtual repository from cached ZIP
+                virtual_repo = VirtualRepository(repo_url, zip_data)
+                _virtual_repo_cache[repo_url] = virtual_repo
+                
+                return virtual_repo
+            except Exception as e:
+                print(f"⚠️  Could not load cached ZIP {zip_file_path}: {e}")
+    
+    return None
+
+
+def cache_virtual_repository(repo_url: str, virtual_repo: VirtualRepository):
+    """Cache virtual repository both in memory and on disk."""
+    global _virtual_repo_cache
+    
+    # Cache in memory
+    _virtual_repo_cache[repo_url] = virtual_repo
+    
+    # Cache ZIP data to disk for persistence
+    github_info = parse_github_url(repo_url)
+    if github_info:
+        owner = github_info['owner']
+        repo = github_info['repo']
+        branch = github_info['branch']
+        cache_key = f"{owner}_{repo}_{branch}"
+        
+        zip_file_path = _zip_cache_dir / f"{cache_key}.zip"
+        try:
+            with open(zip_file_path, 'wb') as f:
+                f.write(virtual_repo.zip_data)
+            print(f"💾 ZIP cached to disk: {zip_file_path}")
+        except Exception as e:
+            print(f"⚠️  Could not cache ZIP to disk: {e}")
+
+class VirtualDirectory:
+    """In-memory representation of a ZIP-based repository for fast access."""
+    
+    def __init__(self, repo_url: str, zip_data: bytes):
+        self.repo_url = repo_url
+        self.zip_data = zip_data
+        self.files = {}  # path -> file_info dict
+        self.directories = set()
+        self._build_virtual_structure()
+    
+    def _build_virtual_structure(self):
+        """Build the virtual directory structure from ZIP data."""
+        with zipfile.ZipFile(BytesIO(self.zip_data), 'r') as zip_ref:
+            for info in zip_ref.infolist():
+                # Skip directories and extract file info
+                if not info.is_dir():
+                    # Remove the top-level directory from path (e.g., "vscode-main/")
+                    path_parts = info.filename.split('/', 1)
+                    if len(path_parts) > 1:
+                        clean_path = path_parts[1]
+                    else:
+                        clean_path = info.filename
+                    
+                    # Store file information
+                    self.files[clean_path] = {
+                        'size': info.file_size,
+                        'compressed_size': info.compress_size,
+                        'modified': info.date_time,
+                        'zip_info': info
+                    }
+                    
+                    # Track directories
+                    dir_path = os.path.dirname(clean_path)
+                    while dir_path and dir_path != '.':
+                        self.directories.add(dir_path)
+                        dir_path = os.path.dirname(dir_path)
+    
+    def get_file_content(self, file_path: str) -> Optional[bytes]:
+        """Get file content directly from ZIP."""
+        if file_path not in self.files:
+            return None
+        
+        try:
+            with zipfile.ZipFile(BytesIO(self.zip_data), 'r') as zip_ref:
+                zip_info = self.files[file_path]['zip_info']
+                return zip_ref.read(zip_info)
+        except Exception:
+            return None
+    
+    def list_files(self, directory: str = "") -> List[str]:
+        """List files in a directory."""
+        if directory and not directory.endswith('/'):
+            directory += '/'
+        
+        files = []
+        for path in self.files.keys():
+            if directory == "" or path.startswith(directory):
+                # Get relative path from directory
+                relative_path = path[len(directory):] if directory else path
+                # Only include direct children (no subdirectories)
+                if '/' not in relative_path:
+                    files.append(relative_path)
+        return files
+    
+    def get_context_summary(self) -> Dict[str, Any]:
+        """Get a summary of the virtual directory for context."""
+        total_files = len(self.files)
+        total_dirs = len(self.directories)
+        total_size = sum(info['size'] for info in self.files.values())
+        
+        # Get file extensions
+        extensions = {}
+        for path in self.files.keys():
+            ext = os.path.splitext(path)[1].lower()
+            if ext:
+                extensions[ext] = extensions.get(ext, 0) + 1
+        
+        # Get top directories by file count
+        dir_counts = {}
+        for path in self.files.keys():
+            dir_path = os.path.dirname(path)
+            if dir_path:
+                top_dir = dir_path.split('/')[0]
+                dir_counts[top_dir] = dir_counts.get(top_dir, 0) + 1
+        
+        return {
+            'repo_url': self.repo_url,
+            'total_files': total_files,
+            'total_directories': total_dirs,
+            'total_size_mb': round(total_size / (1024 * 1024), 2),
+            'file_extensions': dict(sorted(extensions.items(), key=lambda x: x[1], reverse=True)[:10]),
+            'top_directories': dict(sorted(dir_counts.items(), key=lambda x: x[1], reverse=True)[:10])
+        }
 
 
 def check_agent_supports_coding(agent_name: str) -> bool:
@@ -47,6 +308,340 @@ def generate_repo_hash(git_url: str) -> str:
     return hash_object.hexdigest()[:5]  # Use first 5 characters as requested
 
 
+def parse_github_url(git_url: str) -> Optional[dict]:
+    """
+    Parse a GitHub URL and return repository information.
+    
+    Args:
+        git_url: GitHub repository URL (https://github.com/owner/repo or git@github.com:owner/repo.git)
+        
+    Returns:
+        Dict with 'owner', 'repo', and 'branch' keys, or None if not a valid GitHub URL
+    """
+    # Patterns for different GitHub URL formats
+    patterns = [
+        r'https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?(?:/tree/([^/]+))?$',
+        r'git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$',
+        r'github\.com/([^/]+)/([^/]+?)(?:\.git)?/?(?:/tree/([^/]+))?$'
+    ]
+    
+    for pattern in patterns:
+        match = re.match(pattern, git_url.strip())
+        if match:
+            owner, repo = match.groups()[:2]
+            branch = match.groups()[2] if len(match.groups()) > 2 and match.groups()[2] else 'main'
+            return {'owner': owner, 'repo': repo, 'branch': branch}
+    
+    return None
+
+
+def download_github_zip(git_url: str, target_dir: Path) -> bool:
+    """
+    Download a GitHub repository as ZIP and extract it.
+    This creates both disk files (for change tracking) and virtual directory (for fast context access).
+    
+    Args:
+        git_url: GitHub repository URL
+        target_dir: Directory where the repository should be extracted
+        
+    Returns:
+        True if download and extraction was successful, False otherwise
+    """
+    global _zip_cache, _virtual_directories
+    
+    try:
+        github_info = parse_github_url(git_url)
+        if not github_info:
+            return False  # Not a GitHub URL, fall back to git clone
+        
+        owner = github_info['owner']
+        repo = github_info['repo']
+        branch = github_info['branch']
+        
+        # Create cache key for this repository
+        cache_key = f"{owner}/{repo}@{branch}"
+        
+        # Check if we have this repository cached
+        zip_data = None
+        if cache_key in _zip_cache:
+            print(f"💾 Using cached ZIP for {cache_key}")
+            zip_data = _zip_cache[cache_key]
+        else:
+            # GitHub ZIP download URL
+            zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+            
+            print(f"📦 Downloading {owner}/{repo} (branch: {branch}) as ZIP...")
+            
+            # Download ZIP data to memory
+            try:
+                response = urllib.request.urlopen(zip_url)
+                zip_data = response.read()
+                
+                # Cache the ZIP data
+                _zip_cache[cache_key] = zip_data
+                print(f"✅ Downloaded and cached ZIP file ({len(zip_data)} bytes)")
+                
+            except urllib.error.HTTPError as e:
+                if e.code == 404 and branch == 'main':
+                    # Try with 'master' branch
+                    print(f"� Trying with 'master' branch...")
+                    master_zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/master.zip"
+                    
+                    try:
+                        response = urllib.request.urlopen(master_zip_url)
+                        zip_data = response.read()
+                        
+                        # Update cache key for master branch
+                        cache_key = f"{owner}/{repo}@master"
+                        _zip_cache[cache_key] = zip_data
+                        print(f"✅ Downloaded and cached ZIP file (master branch)")
+                        
+                    except Exception:
+                        print(f"❌ Could not download repository with master branch either")
+                        return False
+                else:
+                    print(f"❌ Repository not found or access denied (HTTP {e.code})")
+                    return False
+        
+        # Create virtual directory from ZIP data
+        virtual_dir = VirtualDirectory(git_url, zip_data)
+        _virtual_directories[cache_key] = virtual_dir
+        print(f"🧠 Created virtual directory: {virtual_dir.get_context_summary()['total_files']} files, "
+              f"{virtual_dir.get_context_summary()['total_directories']} directories")
+        
+        # Extract to disk for file system access and change tracking
+        # Create parent directory if it doesn't exist
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        
+        # If directory already exists, remove it
+        if target_dir.exists():
+            print(f"🗑️  Removing existing directory: {target_dir}")
+            shutil.rmtree(target_dir)
+        
+        # Extract ZIP file to disk
+        with zipfile.ZipFile(BytesIO(zip_data), 'r') as zip_ref:
+            # GitHub ZIP files have a root folder named "repo-branch"
+            # We need to extract and rename it to our target directory
+            
+            # First, extract to a temporary directory
+            with tempfile.TemporaryDirectory() as temp_extract_dir:
+                zip_ref.extractall(temp_extract_dir)
+                
+                # Find the extracted folder (should be repo-branch)
+                extracted_folders = [f for f in os.listdir(temp_extract_dir) 
+                                   if os.path.isdir(os.path.join(temp_extract_dir, f))]
+                
+                if not extracted_folders:
+                    print(f"❌ No folders found in ZIP file")
+                    return False
+                
+                # Move the extracted content to target directory
+                extracted_folder = os.path.join(temp_extract_dir, extracted_folders[0])
+                shutil.move(extracted_folder, str(target_dir))
+                
+                print(f"✅ Successfully extracted repository to {target_dir}")
+                
+                # Load repository context into memory for fast access
+                try:
+                    from src.tools.context import load_repository_context_after_clone
+                    if load_repository_context_after_clone(str(target_dir), cache_content=True, quiet=True):
+                        print(f"🔍 Starting repository scan...")
+                        print(f"🧠 Repository context loaded into memory")
+                except ImportError:
+                    print(f"⚠️  Repository context system not available")
+                except Exception as e:
+                    print(f"⚠️  Could not load repository context: {e}")
+                
+                return True
+                    
+    except Exception as e:
+        print(f"❌ Error downloading repository: {e}")
+        return False
+
+
+def download_github_zip_to_memory(git_url: str, target_dir: Path) -> bool:
+    """
+    Enhanced version: Download GitHub repository as ZIP and create virtual repository in memory.
+    This provides instant access to all files without disk I/O.
+    
+    Args:
+        git_url: GitHub repository URL
+        target_dir: Directory where the repository should be extracted (for compatibility)
+        
+    Returns:
+        True if download and virtual extraction was successful, False otherwise
+    """
+    try:
+        github_info = parse_github_url(git_url)
+        if not github_info:
+            return False  # Not a GitHub URL, fall back to git clone
+        
+        owner = github_info['owner']
+        repo = github_info['repo']
+        branch = github_info['branch']
+        
+        # Check if we already have this repository in virtual cache
+        existing_virtual_repo = get_virtual_repository(git_url)
+        if existing_virtual_repo:
+            print(f"⚡ Using cached virtual repository: {owner}/{repo}")
+            # Also extract to disk for compatibility
+            if not target_dir.exists():
+                _extract_virtual_repo_to_disk(existing_virtual_repo, target_dir)
+            return True
+        
+        # GitHub ZIP download URL
+        zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+        
+        print(f"📦 Downloading {owner}/{repo} (branch: {branch}) as ZIP...")
+        
+        # Download ZIP file to memory
+        with urllib.request.urlopen(zip_url) as response:
+            zip_data = response.read()
+        
+        print(f"✅ Downloaded ZIP file ({len(zip_data) / 1024 / 1024:.1f} MB)")
+        
+        # Create virtual repository in memory
+        print(f"🧠 Creating virtual repository in memory...")
+        virtual_repo = VirtualRepository(git_url, zip_data)
+        
+        # Cache the virtual repository
+        cache_virtual_repository(git_url, virtual_repo)
+        
+        print(f"✅ Virtual repository created: {virtual_repo.metadata['total_files']} files, {virtual_repo.metadata['total_directories']} directories")
+        
+        # Also extract to disk for compatibility with existing tools
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        if target_dir.exists():
+            print(f"🗑️  Removing existing directory: {target_dir}")
+            shutil.rmtree(target_dir)
+        
+        _extract_virtual_repo_to_disk(virtual_repo, target_dir)
+        print(f"✅ Successfully extracted repository to {target_dir}")
+        
+        # Load repository context into memory for fast access
+        try:
+            from src.tools.context import load_repository_context_after_clone
+            if load_repository_context_after_clone(str(target_dir), cache_content=True, quiet=True):
+                print(f"🧠 Repository context loaded into memory")
+        except ImportError:
+            print(f"⚠️  Repository context system not available")
+        except Exception as e:
+            print(f"⚠️  Could not load repository context: {e}")
+        
+        return True
+                    
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"❌ Repository not found or branch '{branch}' doesn't exist")
+            # Try with 'master' branch if 'main' failed
+            if branch == 'main':
+                print(f"🔄 Trying with 'master' branch...")
+                
+                # Try downloading with master branch
+                master_zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/master.zip"
+                
+                try:
+                    with urllib.request.urlopen(master_zip_url) as response:
+                        zip_data = response.read()
+                    
+                    print(f"✅ Downloaded ZIP file (master branch, {len(zip_data) / 1024 / 1024:.1f} MB)")
+                    
+                    # Create virtual repository with master branch
+                    virtual_repo = VirtualRepository(git_url, zip_data)
+                    cache_key_master = f"{owner}/{repo}:master"
+                    cache_virtual_repository(cache_key_master, virtual_repo)
+                    
+                    print(f"✅ Virtual repository created: {virtual_repo.metadata['total_files']} files, {virtual_repo.metadata['total_directories']} directories")
+                    
+                    # Extract to disk for compatibility
+                    target_dir.parent.mkdir(parents=True, exist_ok=True)
+                    if target_dir.exists():
+                        shutil.rmtree(target_dir)
+                    
+                    _extract_virtual_repo_to_disk(virtual_repo, target_dir)
+                    print(f"✅ Successfully extracted repository to {target_dir}")
+                    
+                    return True
+                    
+                except Exception as master_e:
+                    print(f"❌ Master branch download also failed: {master_e}")
+                    return False
+        else:
+            print(f"❌ HTTP error downloading repository: {e}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error downloading repository: {e}")
+        return False
+
+
+def _extract_virtual_repo_to_disk(virtual_repo: VirtualRepository, target_dir: Path):
+    """Extract virtual repository to disk for compatibility."""
+    try:
+        # Create target directory
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Extract all files
+        for file_path, content in virtual_repo.files.items():
+            # Remove the top-level directory from GitHub ZIP structure
+            path_parts = Path(file_path).parts
+            if len(path_parts) > 1:
+                # Skip the first part (repo-branch folder)
+                relative_path = Path(*path_parts[1:])
+            else:
+                relative_path = Path(file_path)
+            
+            full_path = target_dir / relative_path
+            
+            # Create parent directory if needed
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write file content
+            try:
+                with open(full_path, 'wb') as f:
+                    f.write(content)
+            except Exception as e:
+                print(f"⚠️  Could not write file {relative_path}: {e}")
+                
+    except Exception as e:
+        print(f"❌ Error extracting virtual repository to disk: {e}")
+
+
+def get_virtual_directory(git_url: str) -> Optional['VirtualDirectory']:
+    """Get the virtual directory for a GitHub repository if it exists."""
+    global _virtual_directories
+    
+    github_info = parse_github_url(git_url)
+    if not github_info:
+        return None
+    
+    # Try both main and master branch keys
+    cache_key_main = f"{github_info['owner']}/{github_info['repo']}@{github_info['branch']}"
+    cache_key_master = f"{github_info['owner']}/{github_info['repo']}@master"
+    
+    return _virtual_directories.get(cache_key_main) or _virtual_directories.get(cache_key_master)
+
+
+def get_cached_repositories() -> Dict[str, Dict[str, Any]]:
+    """Get information about all cached repositories."""
+    global _virtual_directories
+    
+    result = {}
+    for cache_key, virtual_dir in _virtual_directories.items():
+        result[cache_key] = virtual_dir.get_context_summary()
+    
+    return result
+
+
+def clear_repository_cache():
+    """Clear all cached ZIP files and virtual directories."""
+    global _zip_cache, _virtual_directories
+    
+    _zip_cache.clear()
+    _virtual_directories.clear()
+    print("🧹 Repository cache cleared")
+
+
 def get_clone_directory(git_url: str, base_path: str = None) -> Path:
     """Get the directory path where a repository should be cloned."""
     if base_path is None:
@@ -61,6 +656,7 @@ def get_clone_directory(git_url: str, base_path: str = None) -> Path:
 def clone_repository(git_url: str, target_dir: Path) -> bool:
     """
     Clone a git repository to the specified directory.
+    For GitHub repositories, uses ZIP download for faster performance.
     
     Args:
         git_url: URL of the git repository to clone
@@ -70,6 +666,21 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
         True if cloning was successful, False otherwise
     """
     try:
+        # Try GitHub ZIP download first (much faster)
+        if parse_github_url(git_url):
+            print(f"🚀 Detected GitHub repository, using fast ZIP download...")
+            if download_github_zip_to_memory(git_url, target_dir):
+                # Set up virtual directory for context
+                try:
+                    from src.tools.context import set_virtual_directory_for_context
+                    set_virtual_directory_for_context(git_url)
+                except ImportError:
+                    print(f"⚠️  Virtual directory context not available")
+                return True
+            else:
+                print(f"⚠️  ZIP download failed, falling back to git clone...")
+        
+        # Fall back to git clone for non-GitHub URLs or if ZIP download failed
         # Create parent directory if it doesn't exist
         target_dir.parent.mkdir(parents=True, exist_ok=True)
         
@@ -90,6 +701,16 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
                     capture_output=True,
                     text=True
                 )
+            
+            # Load repository context into memory if pull was successful
+            if result.returncode == 0:
+                try:
+                    from src.tools.context import load_repository_context_after_clone
+                    if load_repository_context_after_clone(str(target_dir), cache_content=True, quiet=True):
+                        print(f"🧠 Repository context refreshed in memory")
+                except Exception as e:
+                    print(f"⚠️  Could not refresh repository context: {e}")
+            
             return result.returncode == 0
         
         # If directory exists but is not a git repo, remove it
@@ -98,7 +719,7 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
             import shutil
             shutil.rmtree(target_dir)
         
-        # Clone the repository
+        # Clone the repository using git
         print(f"Cloning {git_url} to {target_dir}...")
         result = subprocess.run(
             ["git", "clone", git_url, str(target_dir)],
@@ -108,6 +729,15 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
         
         if result.returncode == 0:
             print(f"✓ Successfully cloned repository to {target_dir}")
+            
+            # Load repository context into memory after successful clone
+            try:
+                from src.tools.context import load_repository_context_after_clone
+                if load_repository_context_after_clone(str(target_dir), cache_content=True, quiet=True):
+                    print(f"🧠 Repository context loaded into memory")
+            except Exception as e:
+                print(f"⚠️  Could not load repository context: {e}")
+            
             return True
         else:
             print(f"✗ Failed to clone repository: {result.stderr}")
@@ -187,11 +817,7 @@ def validate_repository_requirement(agent_name: str, path: str = ".", git_url: O
     capabilities = get_agent_capabilities(agent_name)
     
     if requires_repository(capabilities):
-        # Check if current directory is already a git repository
-        if is_git_repository(path):
-            return True, path
-        
-        # If git URL is provided, clone the repository
+        # If git URL is provided, always prioritize cloning the specified repository
         if git_url:
             clone_dir = get_clone_directory(git_url, data_path)
             if clone_repository(git_url, clone_dir):
@@ -201,6 +827,10 @@ def validate_repository_requirement(agent_name: str, path: str = ".", git_url: O
                     f"Failed to clone repository '{git_url}' for agent '{agent_name}'. "
                     f"Please check the URL and your network connection."
                 )
+        
+        # If no git URL provided, check if current directory is already a git repository
+        if is_git_repository(path):
+            return True, path
         
         # No git repository and no URL provided
         if not optional:

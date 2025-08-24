@@ -198,7 +198,9 @@ def main():
             # Start the agent with the initial query using single query mode
             from core.single_query_mode import run_single_query
             try:
-                result = run_single_query(args.query, args.agent)
+                connection_mode = getattr(args, 'connection_mode', 'hybrid')
+                print(f"🔗 Using connection mode: {connection_mode}")
+                result = run_single_query(args.query, args.agent, connection_mode, git_url)
                 print(result)
             except Exception as e:
                 print(f"❌ Error running query: {e}")
