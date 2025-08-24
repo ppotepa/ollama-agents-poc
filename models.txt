@@ -1,0 +1,44 @@
+# Models Configuration File
+# 
+# This file defines the available models for the Ollama Agent system.
+# You can use different formats:
+#
+# 1. Simple format (one model per line):
+# deepcoder:14b
+# llama3.3:70b
+#
+# 2. Extended format (name|family|description):
+# deepcoder:14b|deepseek|Main coding assistant
+# llama3.3:70b|llama|High capability model
+#
+# 3. JSON format (array of objects):
+# [
+#   {
+#     "name": "deepcoder:14b",
+#     "family": "deepseek", 
+#     "description": "Main coding assistant",
+#     "size": "14B",
+#     "tags": ["coding", "primary"]
+#   }
+# ]
+
+# Primary coding model
+deepcoder:14b|deepseek|Main coding assistant
+
+# Large language models  
+llama3.3:70b-q2_k|llama|High capability, memory efficient
+llama3.3:70b-q3_k_m|llama|Maximum quality
+
+# Specialized coding models
+codellama:13b-instruct|codellama|Meta's coding specialist
+deepseek-coder:6.7b|deepseek|Compact coding model
+qwen2.5-coder:7b|qwen|Multilingual coding
+
+# Efficient general models
+qwen2.5:3b-instruct|qwen|Compact multilingual
+gemma:7b-instruct|gemma|Google's efficient model
+mistral:7b-instruct|mistral|Efficient conversational
+phi3:mini|phi|Microsoft's compact model
+
+# Testing model
+tinyllama|tinyllama|Minimal testing model

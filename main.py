@@ -27,9 +27,23 @@ def main():
         # Handle list commands early (before agent validation)
         if hasattr(args, 'list_models') and args.list_models:
             print("Available models:")
-            from core.enums import ModelFamily
-            for family in ModelFamily:
-                print(f"  - {family.name}")
+            
+            # Use the new model source system
+            from core.model_source import get_available_models
+            models = get_available_models()
+            
+            if models:
+                for model in models:
+                    info_parts = [f"  - {model.name}"]
+                    if model.family:
+                        info_parts.append(f"({model.family})")
+                    if model.description:
+                        info_parts.append(f"- {model.description}")
+                    if model.size:
+                        info_parts.append(f"[{model.size}]")
+                    print(" ".join(info_parts))
+            else:
+                print("  No models found")
             return
             
         if hasattr(args, 'list_agents') and args.list_agents:
@@ -37,6 +51,13 @@ def main():
             print("  - deepcoder (coding assistant)")
             print("  - coder (general coding)")
             print("  - assistant (general purpose)")
+            return
+        
+        if hasattr(args, 'create_models_config') and args.create_models_config:
+            print("Creating sample models.txt configuration file...")
+            from core.model_source import ModelSource
+            source = ModelSource()
+            source.create_sample_models_txt()
             return
         
         print(f"Starting agent: {args.agent}")

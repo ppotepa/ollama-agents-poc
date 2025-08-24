@@ -1,0 +1,23 @@
+[
+  {
+    "name": "deepcoder:14b",
+    "family": "deepseek",
+    "description": "Main coding assistant",
+    "size": "14B",
+    "tags": ["coding", "primary"]
+  },
+  {
+    "name": "llama3.3:70b-q2_k",
+    "family": "llama",
+    "description": "High capability, memory efficient",
+    "size": "26GB",
+    "tags": ["large", "efficient"]
+  },
+  {
+    "name": "tinyllama:latest",
+    "family": "tinyllama",
+    "description": "Minimal testing model",
+    "size": "637MB",
+    "tags": ["testing", "small"]
+  }
+]

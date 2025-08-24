@@ -19,6 +19,10 @@
       "action": "store_true",
       "help": "(Deprecated) list models"
     },
+    "create-models-config": {
+      "action": "store_true",
+      "help": "Create a sample models.txt configuration file"
+    },
     "config-dir": {
       "type": "str",
       "help": "Configuration directory path"
