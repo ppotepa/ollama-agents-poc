@@ -60,6 +60,19 @@ def main():
             source.create_sample_models_txt()
             return
         
+        # Handle server command early (before agent validation)
+        if hasattr(args, 'server') and args.server:
+            print("🚀 Starting API Server...")
+            host = getattr(args, 'host', '0.0.0.0')
+            port = getattr(args, 'port', 8000)
+            print(f"📡 Server will run on http://{host}:{port}")
+            
+            # Import and run the server
+            from core.server import app
+            import uvicorn
+            uvicorn.run(app, host=host, port=port)
+            return
+        
         print(f"Starting agent: {args.agent}")
         
         # Ensure agent is specified
