@@ -14,6 +14,12 @@ from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+# Import the new integration system
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from integrations import IntegrationManager, AgentRegistry, ModelConfigReader
+
 VERSION = "agent-shim-v2-2025-08-20"
 
 # --------------------------------------------------------------------------------------
@@ -59,6 +65,112 @@ def _now() -> int:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+# Initialize integration manager, agent registry, and model config reader
+integration_manager = IntegrationManager()
+agent_registry = AgentRegistry()
+model_config_reader = ModelConfigReader()
+
+def get_enhanced_models() -> List[Dict[str, Any]]:
+    """
+    Get models enhanced with YAML configuration data.
+    
+    Merges integration models with YAML config to provide:
+    - Short names from YAML
+    - Enhanced metadata and capabilities
+    - Configuration parameters
+    """
+    # Get models from integrations (Ollama, etc.)
+    integration_models = integration_manager.get_all_models()
+    
+    # Get model configurations from YAML
+    yaml_models = model_config_reader.get_all_models()
+    
+    # Create lookup map for YAML configs by model_id
+    yaml_lookup = {config.model_id: config for config in yaml_models}
+    
+    enhanced_models = []
+    
+    for integration_model in integration_models:
+        model_id = integration_model.get("id", "")
+        yaml_config = yaml_lookup.get(model_id)
+        
+        if yaml_config:
+            # Enhance with YAML configuration
+            enhanced_model = {
+                **integration_model,  # Base integration data
+                "short_name": yaml_config.short_name,
+                "display_name": yaml_config.name,
+                "description": yaml_config.description,
+                "provider": yaml_config.provider,
+                "yaml_capabilities": yaml_config.capabilities,
+                "parameters": yaml_config.parameters,
+                "tools": yaml_config.tools,
+                "system_message": yaml_config.system_message,
+                "supports_coding": yaml_config.supports_coding,
+                "supports_file_operations": yaml_config.supports_file_operations,
+                "supports_streaming": yaml_config.supports_streaming,
+                "has_yaml_config": True
+            }
+        else:
+            # Use integration data only
+            enhanced_model = {
+                **integration_model,
+                "short_name": model_id.split(":")[0] if ":" in model_id else model_id,
+                "display_name": integration_model.get("id", "Unknown"),
+                "description": f"Model from {integration_model.get('source', 'unknown')} integration",
+                "has_yaml_config": False
+            }
+        
+        enhanced_models.append(enhanced_model)
+    
+    # Add YAML-only models (not found in integrations)
+    integration_ids = {model.get("id") for model in integration_models}
+    for yaml_config in yaml_models:
+        if yaml_config.model_id not in integration_ids:
+            # YAML-defined model not available in integrations
+            enhanced_model = {
+                "id": yaml_config.model_id,
+                "object": "model",
+                "created": _now(),
+                "owned_by": yaml_config.provider,
+                "permission": [],
+                "supports_agent": True,
+                "supports_tools": True,
+                "supports_tool_calls": True,
+                "supports_function_calling": True,
+                "capabilities": {
+                    "agent": True,
+                    "tools": True,
+                    "tool_calls": True,
+                    "functions": True,
+                    "function_calling": True,
+                },
+                "tool_resources": yaml_config.tools,
+                "type": "chat.completions",
+                "short_name": yaml_config.short_name,
+                "display_name": yaml_config.name,
+                "description": yaml_config.description,
+                "provider": yaml_config.provider,
+                "yaml_capabilities": yaml_config.capabilities,
+                "parameters": yaml_config.parameters,
+                "tools": yaml_config.tools,
+                "system_message": yaml_config.system_message,
+                "supports_coding": yaml_config.supports_coding,
+                "supports_file_operations": yaml_config.supports_file_operations,
+                "supports_streaming": yaml_config.supports_streaming,
+                "has_yaml_config": True,
+                "source": "yaml_config",
+                "available": False,  # Not available in integrations
+                "details": {
+                    "size": "Unknown",
+                    "family": "unknown",
+                    "status": "configured but not available"
+                }
+            }
+            enhanced_models.append(enhanced_model)
+    
+    return enhanced_models
 
 def tool_call_payload(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """Build a single tool_call entry (OpenAI format)."""
@@ -184,6 +296,119 @@ def healthz():
         "file": __file__,
     }
 
+@app.get("/v1/integrations/health")
+def integrations_health():
+    """Get health status of all integrations."""
+    return integration_manager.health_check()
+
+@app.get("/v1/integrations")
+def list_integrations():
+    """List all available integrations."""
+    return {
+        "integrations": integration_manager.list_integrations(),
+        "available": integration_manager.get_available_integrations()
+    }
+
+@app.get("/v1/models/all")
+def list_all_models():
+    """List all models (both available and configured)."""
+    enhanced_models = get_enhanced_models()
+    
+    return {
+        "object": "list", 
+        "data": enhanced_models,
+        "total": len(enhanced_models),
+        "available": len([m for m in enhanced_models if m.get("available", True)]),
+        "configured": len([m for m in enhanced_models if m.get("has_yaml_config", False)])
+    }
+
+@app.get("/v1/models/with-agents")
+def list_models_with_agents():
+    """List models with their agent implementation status."""
+    enhanced_models = get_enhanced_models()
+    matches = agent_registry.match_models_with_agents(enhanced_models)
+    
+    # Separate models with and without agents
+    with_agents = []
+    without_agents = []
+    
+    for match in matches:
+        model_data = {
+            "model_id": match.model_id,
+            "model_info": match.model_info,
+            "has_agent": match.has_agent,
+            "match_confidence": match.match_confidence,
+            "match_reason": match.match_reason,
+            "short_name": match.model_info.get("short_name", "unknown"),
+            "display_name": match.model_info.get("display_name", "Unknown"),
+            "has_yaml_config": match.model_info.get("has_yaml_config", False)
+        }
+        
+        if match.has_agent and match.agent_info:
+            model_data["agent_info"] = {
+                "name": match.agent_info.name,
+                "description": match.agent_info.description,
+                "capabilities": match.agent_info.capabilities,
+                "family": match.agent_info.family
+            }
+            with_agents.append(model_data)
+        else:
+            without_agents.append(model_data)
+    
+    return {
+        "with_agents": with_agents,
+        "without_agents": without_agents,
+        "summary": {
+            "total_models": len(matches),
+            "with_agents": len(with_agents),
+            "without_agents": len(without_agents),
+            "coverage_percentage": round((len(with_agents) / len(matches)) * 100, 1) if matches else 0
+        }
+    }
+
+@app.get("/v1/models/short-names")
+def list_model_short_names():
+    """List models with their short names for easy reference."""
+    enhanced_models = get_enhanced_models()
+    
+    short_name_list = []
+    for model in enhanced_models:
+        short_name_list.append({
+            "short_name": model.get("short_name", "unknown"),
+            "model_id": model.get("id", "unknown"),
+            "display_name": model.get("display_name", "Unknown"),
+            "available": model.get("available", True),
+            "has_config": model.get("has_yaml_config", False),
+            "supports_coding": model.get("supports_coding", False),
+            "provider": model.get("provider", "unknown")
+        })
+    
+    return {
+        "models": sorted(short_name_list, key=lambda x: x["short_name"]),
+        "total": len(short_name_list)
+    }
+
+@app.get("/v1/agents")
+def list_agents():
+    """List all available agent implementations."""
+    agents = agent_registry.list_agents()
+    
+    agent_data = []
+    for agent in agents:
+        agent_data.append({
+            "name": agent.name,
+            "description": agent.description,
+            "family": agent.family,
+            "capabilities": agent.capabilities,
+            "model_patterns": agent.model_patterns,
+            "module_path": agent.module_path
+        })
+    
+    return {
+        "agents": agent_data,
+        "total": len(agent_data)
+    }
+
 @app.get("/v1/capabilities")
 def capabilities():
     return {
@@ -195,30 +420,15 @@ def capabilities():
 
 @app.get("/v1/models")
 def list_models():
-    # Single logical model exposed: "deepseek-agent"
+    """List available models with YAML configuration data."""
+    enhanced_models = get_enhanced_models()
+    
+    # Filter to only show available models (from integrations)
+    available_models = [model for model in enhanced_models if model.get("available", True)]
+    
     return {
         "object": "list",
-        "data": [{
-            "id": "deepseek-agent",
-            "object": "model",
-            "created": _now(),
-            "owned_by": "local",
-            "permission": [],
-            # Flags Continue looks for:
-            "supports_agent": True,
-            "supports_tools": True,
-            "supports_tool_calls": True,
-            "supports_function_calling": True,
-            "capabilities": {
-                "agent": True,
-                "tools": True,
-                "tool_calls": True,
-                "functions": True,
-                "function_calling": True,
-            },
-            "tool_resources": ["code", "files", "terminal", "docs", "diff", "problems", "folder", "codebase"],
-            "type": "chat.completions",
-        }],
+        "data": available_models
     }
 
 @app.post("/v1/chat/completions")

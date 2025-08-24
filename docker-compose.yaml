@@ -34,11 +34,11 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ./server.py:/app/server.py:ro
+      - .:/app:ro
     command: >
       sh -c "
-        pip install --no-cache-dir fastapi uvicorn pydantic requests &&
-        uvicorn server:app --host 0.0.0.0 --port 8000 --no-server-header --timeout-keep-alive 30
+        pip install --no-cache-dir -r requirements.txt &&
+        python main.py --server --host 0.0.0.0 --port 8000
       "
     ports:
       - "8000:8000"

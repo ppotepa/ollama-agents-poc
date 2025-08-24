@@ -8,8 +8,35 @@ from typing import List, Optional, Tuple
 from .enums import AgentCapability, Domain
 
 
+def check_agent_supports_coding(agent_name: str) -> bool:
+    """Check if the given agent supports coding by looking up its configuration."""
+    try:
+        from integrations.model_config_reader import ModelConfigReader
+        
+        # Load the model configuration
+        config_reader = ModelConfigReader('src/config/models.yaml')
+        
+        # Look for the agent by short_name
+        model_config = config_reader.get_model(agent_name)
+        if model_config:
+            return model_config.supports_coding
+        
+        # If not found by short name, try to find by model ID
+        for model in config_reader.get_all_models():
+            if agent_name in model.model_id or model.model_id.startswith(agent_name):
+                return model.supports_coding
+                
+        # Default to False if agent not found in configuration
+        return False
+        
+    except Exception as e:
+        print(f"⚠️  Warning: Could not determine coding capability for agent '{agent_name}': {e}")
+        # For safety, assume coding agents need repositories
+        return True
+
+
 def generate_repo_hash(git_url: str) -> str:
-    """Generate a consistent hash from a git URL for directory naming."""
+    """Generate a consistent 5-character hash from a git URL for directory naming."""
     # Normalize the URL (remove .git suffix, convert to lowercase)
     normalized_url = git_url.lower().rstrip('/')
     if normalized_url.endswith('.git'):
@@ -17,7 +44,7 @@ def generate_repo_hash(git_url: str) -> str:
     
     # Generate SHA256 hash
     hash_object = hashlib.sha256(normalized_url.encode('utf-8'))
-    return hash_object.hexdigest()[:12]  # Use first 12 characters for readability
+    return hash_object.hexdigest()[:5]  # Use first 5 characters as requested
 
 
 def get_clone_directory(git_url: str, base_path: str = None) -> Path:
@@ -122,16 +149,17 @@ def is_coding_agent(agent_name: str) -> bool:
 
 
 def get_agent_capabilities(agent_name: str) -> List[AgentCapability]:
-    """Get capabilities for a given agent."""
-    # This could be enhanced to read from agent metadata
-    # For now, using simple mapping
-    capability_map = {
-        "deepcoder": [AgentCapability.CODE, AgentCapability.REPO_ANALYSIS, AgentCapability.FILES],
-        "coder": [AgentCapability.CODE, AgentCapability.REPO_ANALYSIS],
-        "assistant": [AgentCapability.STREAMING, AgentCapability.FUNCTION_CALLS],
-    }
+    """Get capabilities for a given agent based on YAML configuration."""
+    capabilities = []
     
-    return capability_map.get(agent_name.lower(), [])
+    # Check if agent supports coding from YAML configuration
+    if check_agent_supports_coding(agent_name):
+        capabilities.extend([AgentCapability.CODE, AgentCapability.REPO_ANALYSIS, AgentCapability.FILES])
+    else:
+        # Non-coding agents get basic capabilities
+        capabilities.extend([AgentCapability.STREAMING, AgentCapability.FUNCTION_CALLS])
+    
+    return capabilities
 
 
 def requires_repository(capabilities: List[AgentCapability]) -> bool:

@@ -17,7 +17,11 @@
     },
     "list-models": {
       "action": "store_true",
-      "help": "(Deprecated) list models"
+      "help": "List models with agent implementation status"
+    },
+    "list-all": {
+      "action": "store_true", 
+      "help": "List all available models from integrations"
     },
     "create-models-config": {
       "action": "store_true",

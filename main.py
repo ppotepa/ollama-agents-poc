@@ -25,25 +25,67 @@ def main():
         args = parser.parse_args()
         
         # Handle list commands early (before agent validation)
-        if hasattr(args, 'list_models') and args.list_models:
-            print("Available models:")
+        if hasattr(args, 'list_all') and args.list_all:
+            print("🔍 All Available Models (from integrations):")
             
-            # Use the new model source system
-            from core.model_source import get_available_models
-            models = get_available_models()
+            # Use the new integration system
+            from integrations import IntegrationManager
+            manager = IntegrationManager()
+            models = manager.get_all_models()
             
             if models:
                 for model in models:
-                    info_parts = [f"  - {model.name}"]
-                    if model.family:
-                        info_parts.append(f"({model.family})")
-                    if model.description:
-                        info_parts.append(f"- {model.description}")
-                    if model.size:
-                        info_parts.append(f"[{model.size}]")
+                    info_parts = [f"  📦 {model['id']}"]
+                    details = model.get('details', {})
+                    if details.get('size'):
+                        info_parts.append(f"({details['size']})")
+                    if details.get('family'):
+                        info_parts.append(f"[{details['family']}]")
+                    if model.get('source'):
+                        info_parts.append(f"via {model['source']}")
                     print(" ".join(info_parts))
+                print(f"\n📊 Total: {len(models)} models available")
             else:
-                print("  No models found")
+                print("  ❌ No models found from integrations")
+            return
+            
+        if hasattr(args, 'list_models') and args.list_models:
+            print("🤖 Models with Agent Implementation Status:")
+            
+            # Get models from integrations
+            from integrations import IntegrationManager, AgentRegistry
+            manager = IntegrationManager()
+            registry = AgentRegistry()
+            
+            models = manager.get_all_models()
+            matches = registry.match_models_with_agents(models)
+            
+            if matches:
+                # Group by agent status
+                with_agents = [m for m in matches if m.has_agent]
+                without_agents = [m for m in matches if not m.has_agent]
+                
+                if with_agents:
+                    print(f"\n✅ Models WITH Agent Implementation ({len(with_agents)}):")
+                    for match in sorted(with_agents, key=lambda x: x.match_confidence, reverse=True):
+                        confidence_icon = "🎯" if match.match_confidence > 0.8 else "✓"
+                        agent_name = match.agent_info.name if match.agent_info else "unknown"
+                        size = match.model_info.get('details', {}).get('size', 'Unknown')
+                        print(f"  {confidence_icon} {match.model_id} → {agent_name} ({size}) - {match.match_reason}")
+                
+                if without_agents:
+                    print(f"\n❌ Models WITHOUT Agent Implementation ({len(without_agents)}):")
+                    for match in without_agents[:10]:  # Limit to first 10
+                        size = match.model_info.get('details', {}).get('size', 'Unknown')
+                        family = match.model_info.get('details', {}).get('family', 'unknown')
+                        print(f"  ⚠️  {match.model_id} ({size}) [{family}] - No compatible agent found")
+                    
+                    if len(without_agents) > 10:
+                        print(f"  ... and {len(without_agents) - 10} more")
+                
+                print(f"\n📊 Summary: {len(with_agents)} ready, {len(without_agents)} need agents")
+            else:
+                print("  ❌ No models found")
             return
             
         if hasattr(args, 'list_agents') and args.list_agents:
@@ -86,6 +128,19 @@ def main():
             git_url = args.git_repo
         elif hasattr(args, 'g') and args.g:
             git_url = args.g
+        
+        # Check if agent supports coding and enforce repository requirement
+        from core.repository_validation import check_agent_supports_coding
+        agent_supports_coding = check_agent_supports_coding(args.agent)
+        
+        # For command-line mode with query, require -g flag for coding agents
+        if hasattr(args, 'query') and args.query and agent_supports_coding and not git_url:
+            print(f"❌ Error: Agent '{args.agent}' is a coding agent and requires a git repository.")
+            print("   Please provide a git repository URL using the -g flag:")
+            print("   Example: python main.py --agent deepcoder -g https://github.com/user/repo.git --query 'your question'")
+            sys.exit(1)
+        
+        # For interactive mode with coding agents, we'll prompt for repository later
         
         # Validate repository requirement for coding agents
         try:
@@ -131,21 +186,29 @@ def main():
         # Handle query mode (direct chat input)
         if hasattr(args, 'query') and args.query:
             print(f"💬 Query mode: {args.query}")
-            # This would normally start the agent with the initial query
-            print(f"🎯 Agent '{args.agent}' would process query: '{args.query}'")
+            # Start the agent with the initial query
+            from core.generic_interactive import run_single_query
+            try:
+                result = run_single_query(args.query, args.agent)
+                print(f"🤖 Agent response: {result}")
+            except Exception as e:
+                print(f"❌ Error running query: {e}")
+                if hasattr(args, 'verbose') and args.verbose:
+                    import traceback
+                    traceback.print_exc()
         else:
             # Interactive mode
             print(f"🔄 Interactive mode for agent: {args.agent}")
             
-            # Show available models
-            print("\nAvailable model families:")
-            from core.enums import ModelFamily
-            for family in ModelFamily:
-                print(f"  - {family.name}")
-            
-            # This is where the actual agent would start interactive mode
-            print(f"\n🎯 Agent '{args.agent}' would start interactive session here...")
-            print("💡 Use Ctrl+C to exit")
+            # Start the generic interactive session (it will handle repository prompting internally)
+            from core.generic_interactive import run_interactive_session
+            try:
+                run_interactive_session(args.agent)
+            except Exception as e:
+                print(f"❌ Error starting interactive session: {e}")
+                if hasattr(args, 'verbose') and args.verbose:
+                    import traceback
+                    traceback.print_exc()
             
         print("✅ Agent session completed!")
         
