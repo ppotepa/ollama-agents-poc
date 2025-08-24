@@ -6,11 +6,63 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 
-def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False) -> str:
-    """Run a single query with cognitive command interpretation and connection mode support."""
+def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5) -> str:
+    """Run a query using collaborative back-and-forth between main agent and interceptor."""
+    try:
+        from src.core.collaborative_system import create_collaborative_system
+        from src.core.helpers import get_agent_instance
+        
+        print(f"🤝 Starting collaborative query execution")
+        print(f"🤖 Main agent: {agent_name}")
+        print(f"🔄 Max iterations: {max_iterations}")
+        print("=" * 60)
+        
+        # Get the main agent instance
+        main_agent = get_agent_instance(agent_name)
+        
+        # Create collaborative system
+        collaborative_system = create_collaborative_system(main_agent, max_iterations)
+        
+        # Execute collaborative query
+        results = collaborative_system.collaborative_execution(
+            query=query,
+            working_directory=os.getcwd(),
+            max_steps=max_iterations
+        )
+        
+        if results["success"]:
+            print(f"✅ Collaborative execution completed successfully")
+            print(f"📊 Total steps: {results['total_steps']}")
+            print(f"🔧 Commands executed: {', '.join(results['commands_executed'])}")
+            print(f"📁 Files discovered: {len(results['files_discovered'])}")
+            return results["final_answer"]
+        else:
+            return f"❌ Collaborative execution failed"
+            
+    except Exception as e:
+        print(f"❌ Error in collaborative mode: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to regular single query
+        print(f"🔄 Falling back to regular single query mode")
+        return run_single_query(query, agent_name, collaborative=False)
+
+
+def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False, collaborative: bool = False, max_iterations: int = 5) -> str:
+    """Run a single query with cognitive command interpretation and connection mode support.
+    
+    Args:
+        collaborative: If True, use iterative collaboration between main agent and interceptor
+        max_iterations: Maximum number of collaborative iterations (only used if collaborative=True)
+    """
     connection = None
     try:
         print(f"🔍 Debug: Starting run_single_query for agent '{agent_name}' with {connection_mode} mode")
+        
+        # **COLLABORATIVE MODE**: Use iterative back-and-forth between agents
+        if collaborative:
+            print(f"🤝 Enabling collaborative mode with {max_iterations} max iterations")
+            return run_collaborative_query(query, agent_name, max_iterations)
         
         # **PROMPT INTERCEPTION**: Intercept and enhance the prompt with contextual information
         print(f"🧠 Intercepting and analyzing prompt...")

@@ -104,6 +104,17 @@
       "choices": ["direct", "request", "hybrid"],
       "help": "Connection mode: 'direct' (temporary server), 'request' (existing server), 'hybrid' (try request then direct)",
       "dest": "connection_mode"
+    },
+    "collaborative": {
+      "action": "store_true",
+      "help": "Enable collaborative mode with iterative agent back-and-forth processing",
+      "dest": "collaborative"
+    },
+    "max-iterations": {
+      "type": "int",
+      "default": 5,
+      "help": "Maximum number of collaborative iterations (default: 5)",
+      "dest": "max_iterations"
     }
   },
   "subcommands": {

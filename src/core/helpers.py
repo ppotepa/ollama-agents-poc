@@ -1046,3 +1046,71 @@ def is_git_url(url: str) -> bool:
     
     url_lower = url.lower()
     return any(pattern in url_lower for pattern in git_patterns)
+
+
+def get_agent_instance(agent_name: str):
+    """Get the appropriate agent instance based on the agent name."""
+    import sys
+    try:
+        # Add parent directory to path for imports
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        
+        from integrations.model_config_reader import ModelConfigReader
+        
+        # Load the model configuration to get agent details
+        config_reader = ModelConfigReader('src/config/models.yaml')
+        model_config = config_reader.get_model(agent_name)
+        
+        if not model_config:
+            # Try to find by model ID or partial match
+            for model in config_reader.get_all_models():
+                if (agent_name in model.model_id or 
+                    model.model_id.startswith(agent_name) or
+                    agent_name in model.short_name):
+                    model_config = model
+                    break
+        
+        if not model_config:
+            raise ValueError(f"No configuration found for agent '{agent_name}'")
+        
+        # Convert model config to agent config format
+        agent_config = {
+            "name": model_config.name,
+            "model_id": model_config.model_id,
+            "backend_image": model_config.model_id,
+            "parameters": model_config.parameters,
+            "tools": model_config.tools,
+            "system_message": model_config.system_message,
+            "supports_coding": model_config.supports_coding
+        }
+        
+        # Determine which agent implementation to use based on agent type
+        if agent_name.lower() in ['deepcoder', 'coder'] or model_config.supports_coding:
+            # Use the sophisticated DeepCoderAgent for coding agents
+            try:
+                from src.agents.deepcoder.agent import create_agent
+                return create_agent(agent_name, agent_config)
+            except ImportError:
+                print(f"⚠️  Warning: DeepCoderAgent not available, falling back to simple agent")
+                # Import SimpleQueryAgent from single_query_mode
+                from .single_query_mode import SimpleQueryAgent
+                return SimpleQueryAgent(agent_name, agent_config)
+        else:
+            # Use simple agent for non-coding agents
+            from .single_query_mode import SimpleQueryAgent
+            return SimpleQueryAgent(agent_name, agent_config)
+            
+    except Exception as e:
+        print(f"⚠️  Warning: Could not load proper agent, using fallback: {e}")
+        # Create a basic fallback config
+        fallback_config = {
+            'name': agent_name.title(),
+            'model_id': agent_name,
+            'backend_image': agent_name,
+            'parameters': {'temperature': 0.7, 'num_ctx': 8192},
+            'tools': [],
+            'system_message': "You are an AI assistant.",
+            'supports_coding': True
+        }
+        from .single_query_mode import SimpleQueryAgent
+        return SimpleQueryAgent(agent_name, fallback_config)

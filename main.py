@@ -207,10 +207,25 @@ def main():
                 connection_mode = getattr(args, 'connection_mode', 'hybrid')
                 interception_mode = getattr(args, 'interception_mode', 'smart')
                 force_streaming = getattr(args, 'force_streaming', False)
+                collaborative = getattr(args, 'collaborative', False)
+                max_iterations = getattr(args, 'max_iterations', 5)
+                
                 print(f"🔗 Using connection mode: {connection_mode}")
                 if force_streaming:
                     print(f"🎬 Streaming mode enabled")
-                result = run_single_query(args.query, args.agent, connection_mode, git_url, interception_mode, force_streaming)
+                if collaborative:
+                    print(f"🤝 Collaborative mode enabled (max {max_iterations} iterations)")
+                
+                result = run_single_query(
+                    args.query, 
+                    args.agent, 
+                    connection_mode, 
+                    git_url, 
+                    interception_mode, 
+                    force_streaming,
+                    collaborative=collaborative,
+                    max_iterations=max_iterations
+                )
                 print(result)
             except Exception as e:
                 print(f"❌ Error running query: {e}")
