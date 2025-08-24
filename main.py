@@ -24,7 +24,27 @@ def main():
         parser = get_parser(parameters)
         args = parser.parse_args()
         
+        # Handle list commands early (before agent validation)
+        if hasattr(args, 'list_models') and args.list_models:
+            print("Available models:")
+            from core.enums import ModelFamily
+            for family in ModelFamily:
+                print(f"  - {family.name}")
+            return
+            
+        if hasattr(args, 'list_agents') and args.list_agents:
+            print("Available agents:")
+            print("  - deepcoder (coding assistant)")
+            print("  - coder (general coding)")
+            print("  - assistant (general purpose)")
+            return
+        
         print(f"Starting agent: {args.agent}")
+        
+        # Ensure agent is specified
+        if not args.agent:
+            print("Error: No agent specified. Use --agent <name> or see available options with --list-agents")
+            sys.exit(1)
         
         # Get git URL if provided (check multiple possible argument names)
         git_url = None
