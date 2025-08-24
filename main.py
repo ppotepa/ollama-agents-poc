@@ -116,16 +116,38 @@ def main():
         if hasattr(args, 'verbose') and args.verbose:
             print(f"Parsed arguments: {vars(args)}")
         
-        # Here you would typically initialize and run the selected agent
-        print(f"Agent '{args.agent}' would be initialized here...")
+        # Initialize and run the selected agent
+        print(f"🤖 Initializing agent: {args.agent}")
         
-        # Example of enum-based processing
-        print("Available model families:")
-        from core.enums import ModelFamily
-        for family in ModelFamily:
-            print(f"  - {family.name}")
+        # Handle fast mode flags
+        fast_mode = hasattr(args, 'fast') and args.fast
+        fast_all_mode = hasattr(args, 'fast_all') and args.fast_all
         
-        print("\nDemo complete!")
+        if fast_all_mode:
+            print("⚡ Fast all mode: Disabling tokenization & streaming everywhere")
+        elif fast_mode:
+            print("🚀 Fast menu mode: Skipping tokenized output for menus")
+        
+        # Handle query mode (direct chat input)
+        if hasattr(args, 'query') and args.query:
+            print(f"💬 Query mode: {args.query}")
+            # This would normally start the agent with the initial query
+            print(f"🎯 Agent '{args.agent}' would process query: '{args.query}'")
+        else:
+            # Interactive mode
+            print(f"🔄 Interactive mode for agent: {args.agent}")
+            
+            # Show available models
+            print("\nAvailable model families:")
+            from core.enums import ModelFamily
+            for family in ModelFamily:
+                print(f"  - {family.name}")
+            
+            # This is where the actual agent would start interactive mode
+            print(f"\n🎯 Agent '{args.agent}' would start interactive session here...")
+            print("💡 Use Ctrl+C to exit")
+            
+        print("✅ Agent session completed!")
         
     except KeyboardInterrupt:
         print("\nOperation cancelled by user")

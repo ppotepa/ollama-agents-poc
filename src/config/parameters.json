@@ -72,6 +72,15 @@
       "type": "int",
       "default": 8000,
       "help": "Server port (with --server)"
+    },
+    "verbose": {
+      "action": "store_true",
+      "help": "Enable verbose output and debugging information"
+    },
+    "-v": {
+      "action": "store_true",
+      "help": "Enable verbose output (alias for --verbose)",
+      "dest": "verbose"
     }
   },
   "subcommands": {
