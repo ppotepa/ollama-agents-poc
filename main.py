@@ -95,6 +95,8 @@ def main():
         if hasattr(args, 'list_agents') and args.list_agents:
             print("Available agents:")
             print("  - deepcoder (coding assistant)")
+            print("  - phi3_mini (compact efficient assistant)")
+            print("  - interceptor (prompt analysis)")
             print("  - coder (general coding)")
             print("  - assistant (general purpose)")
             return
@@ -153,7 +155,11 @@ def main():
             # Make repository optional for command-line queries with coding agents
             is_command_line_query = hasattr(args, 'query') and args.query
             optional_repo = is_command_line_query and agent_supports_coding and not git_url
-            validation_passed, working_dir = validate_repository_requirement(args.agent, ".", git_url, data_path, optional=optional_repo)
+            # Get interception mode for repository handling
+            interception_mode = getattr(args, 'interception_mode', 'smart')
+            validation_passed, working_dir = validate_repository_requirement(
+                args.agent, ".", git_url, data_path, optional=optional_repo, interception_mode=interception_mode
+            )
             if working_dir != ".":
                 print(f"✓ Repository cloned and validated: {working_dir}")
                 # Change to the cloned directory for the agent to work in
@@ -199,8 +205,12 @@ def main():
             from core.single_query_mode import run_single_query
             try:
                 connection_mode = getattr(args, 'connection_mode', 'hybrid')
+                interception_mode = getattr(args, 'interception_mode', 'smart')
+                force_streaming = getattr(args, 'force_streaming', False)
                 print(f"🔗 Using connection mode: {connection_mode}")
-                result = run_single_query(args.query, args.agent, connection_mode, git_url)
+                if force_streaming:
+                    print(f"🎬 Streaming mode enabled")
+                result = run_single_query(args.query, args.agent, connection_mode, git_url, interception_mode, force_streaming)
                 print(result)
             except Exception as e:
                 print(f"❌ Error running query: {e}")

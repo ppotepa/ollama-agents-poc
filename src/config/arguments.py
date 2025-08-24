@@ -121,6 +121,8 @@ def get_parser(parameters: Optional[Dict[str, Any]] = None) -> argparse.Argument
                           help="Model to use for the agent")
         parser.add_argument("--verbose", action="store_true",
                           help="Enable verbose output")
+        parser.add_argument("--interception-mode", type=str, choices=["full", "lightweight", "smart"], 
+                          default="smart", help="Prompt interception mode: full (complete analysis), lightweight (fast), or smart (adaptive)")
         parser.add_argument("--git", action="store_true",
                           help="Show git repository information")
         parser.add_argument("--output", type=str,

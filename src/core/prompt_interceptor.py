@@ -14,6 +14,13 @@ from enum import Enum
 import time
 
 
+class InterceptionMode(Enum):
+    """Modes for prompt interception processing."""
+    FULL = "full"          # Complete context analysis with all commands
+    LIGHTWEIGHT = "lightweight"  # Fast analysis with minimal context
+    SMART = "smart"        # Adaptive mode based on prompt complexity
+    
+
 class PromptType(Enum):
     """Types of prompts that can be intercepted and processed."""
     REPOSITORY_ANALYSIS = "repository_analysis"
@@ -283,23 +290,210 @@ class PromptInterceptor:
             }
         }
     
-    def intercept_and_enhance(self, prompt: str, working_directory: str = None) -> SupplementedPrompt:
+    def intercept_and_enhance(self, prompt: str, working_directory: str = None, mode: InterceptionMode = InterceptionMode.SMART) -> SupplementedPrompt:
         """Main entry point: intercept a prompt and enhance it with contextual information.
         
         Args:
             prompt: The original user prompt
             working_directory: Current working directory (optional)
+            mode: Interception mode (FULL, LIGHTWEIGHT, or SMART)
             
         Returns:
             SupplementedPrompt with enhanced context
         """
-        print(f"🔍 Prompt Interceptor: Analyzing prompt...")
+        print(f"🔍 Prompt Interceptor: Analyzing prompt (mode: {mode.value})...")
         
         # Analyze the prompt context
         context = self._analyze_prompt_context(prompt, working_directory)
         
         print(f"🎯 Detected Intent: {context.detected_intent}")
         print(f"📊 Confidence: {context.confidence:.2f}")
+        
+        # Determine execution mode
+        execution_mode = self._determine_execution_mode(context, mode)
+        print(f"⚡ Execution Mode: {execution_mode.value}")
+        
+        if execution_mode == InterceptionMode.LIGHTWEIGHT:
+            enhanced_result = self._lightweight_enhancement(prompt, context)
+        else:
+            print(f"🔧 Planned Commands: {', '.join(context.supplemental_commands)}")
+            enhanced_result = self._full_enhancement(prompt, context)
+        
+        # **FINAL ENHANCED PROMPT LOGGING**
+        print(f"\n" + "="*100)
+        print(f"🚀 FINAL ENHANCED PROMPT ({execution_mode.value.upper()} MODE)")
+        print(f"="*100)
+        print(enhanced_result.supplemented_prompt)
+        print(f"="*100)
+        print(f"📈 Context: {len(enhanced_result.context_used)} types | Characters: {len(enhanced_result.supplemented_prompt)}")
+        print(f"="*100 + "\n")
+        
+        return enhanced_result
+    
+    def _get_command_recommendations(self, prompt: str) -> List[Dict[str, Any]]:
+        """Get command recommendations using the interceptor agent."""
+        try:
+            from src.agents.interceptor.agent import InterceptorAgent
+            
+            # Create minimal config for the interceptor agent
+            config = {
+                "name": "Prompt Interceptor Agent",
+                "backend_image": "phi3:mini",
+                "parameters": {"temperature": 0.1, "num_ctx": 2048}
+            }
+            
+            interceptor_agent = InterceptorAgent("interceptor", config)
+            print(f"     🤖 Analyzing prompt with phi3:mini interceptor agent...")
+            print(f"     📝 Original query: '{prompt[:100]}{'...' if len(prompt) > 100 else ''}'")
+            recommendations = interceptor_agent.analyze_prompt(prompt, InterceptionMode.LIGHTWEIGHT)
+            print(f"     ✅ Interceptor agent returned {len(recommendations)} recommendations")
+            
+            # Log what was detected/resolved from the query
+            if recommendations:
+                print(f"     🔍 Resolved from query:")
+                for rec in recommendations:
+                    print(f"         • {rec.command} → {rec.description} (confidence: {rec.confidence:.1%})")
+            
+            # Convert to serializable format
+            serialized_recs = [
+                {
+                    "command": rec.command,
+                    "confidence": rec.confidence,
+                    "description": rec.description,
+                    "category": rec.category,
+                    "required_context": rec.required_context
+                }
+                for rec in recommendations
+            ]
+            
+            return serialized_recs
+            
+        except Exception as e:
+            print(f"     ⚠️  Could not get command recommendations: {e}")
+            return []
+    
+    def _determine_execution_mode(self, context: PromptContext, requested_mode: InterceptionMode) -> InterceptionMode:
+        """Determine the best execution mode based on context and request."""
+        if requested_mode == InterceptionMode.LIGHTWEIGHT:
+            return InterceptionMode.LIGHTWEIGHT
+        elif requested_mode == InterceptionMode.FULL:
+            return InterceptionMode.FULL
+        else:  # SMART mode
+            # Use lightweight for simple questions and high-confidence general queries
+            if (context.prompt_type == PromptType.GENERAL and context.confidence < 0.3) or \
+               (context.prompt_type == PromptType.QUESTION_ANSWERING and context.confidence > 0.7):
+                return InterceptionMode.LIGHTWEIGHT
+            # Use full mode for repository/code analysis
+            elif context.prompt_type in [PromptType.REPOSITORY_ANALYSIS, PromptType.CODE_ANALYSIS, 
+                                       PromptType.ARCHITECTURE_REVIEW]:
+                return InterceptionMode.FULL
+            # Default to lightweight for faster responses
+            else:
+                return InterceptionMode.LIGHTWEIGHT
+    
+    def _lightweight_enhancement(self, prompt: str, context: PromptContext) -> SupplementedPrompt:
+        """Provide lightweight enhancement with minimal context using the interceptor agent."""
+        print(f"⚡ Using lightweight mode for fast response...")
+        
+        # Use the interceptor agent for command analysis
+        command_recommendations = self._get_command_recommendations(prompt)
+        
+        # **LOG COMMAND RESOLUTION**
+        print(f"🔍 Command Resolution Results:")
+        if command_recommendations:
+            print(f"     📊 Total commands recommended: {len(command_recommendations)}")
+            for i, cmd_rec in enumerate(command_recommendations, 1):
+                print(f"     [{i}] {cmd_rec['command']} - {cmd_rec['confidence']:.1%} confidence")
+                print(f"         📝 {cmd_rec.get('description', 'No description')}")
+                print(f"         🏷️  Category: {cmd_rec.get('category', 'unknown')}")
+        else:
+            print(f"     ❌ No commands recommended by interceptor agent")
+        print()
+        
+        # Execute recommended commands and gather results
+        context_data = {}
+        command_executions = []
+        
+        if command_recommendations:
+            print(f"     ⚡ Executing {len(command_recommendations)} recommended commands...")
+            
+            # Execute top 3 commands for lightweight mode
+            top_commands = command_recommendations[:3]
+            for i, cmd_rec in enumerate(top_commands, 1):
+                command_name = cmd_rec['command']
+                confidence = cmd_rec['confidence']
+                
+                print(f"     🔧 [{i}/3] Executing: {command_name} (confidence: {confidence:.1%})")
+                
+                try:
+                    start_time = time.time()
+                    result = self._execute_command_safely(command_name)
+                    end_time = time.time()
+                    
+                    if result:
+                        context_data[f"command_{command_name}"] = result
+                        print(f"         ✅ Result: {len(result)} chars")
+                        
+                        command_executions.append(CommandExecution(
+                            command_name=command_name,
+                            start_time=start_time,
+                            end_time=end_time,
+                            duration=end_time - start_time,
+                            success=True,
+                            result_length=len(result)
+                        ))
+                    else:
+                        print(f"         ⚠️  No result returned")
+                        
+                except Exception as e:
+                    print(f"         ❌ Failed: {e}")
+                    command_executions.append(CommandExecution(
+                        command_name=command_name,
+                        start_time=time.time(),
+                        end_time=time.time(),
+                        duration=0,
+                        success=False,
+                        result_length=0,
+                        error_message=str(e)
+                    ))
+        
+        # Add any essential context based on prompt type
+        if context.prompt_type == PromptType.REPOSITORY_ANALYSIS and not context_data:
+            # Fallback: get basic repository info if no commands executed
+            try:
+                from src.tools.context import get_repository_state
+                result = get_repository_state()
+                context_data["basic_repository_info"] = result
+                print(f"     ⚡ Basic repository info retrieved as fallback")
+            except Exception as e:
+                print(f"     ⚠️  Could not get basic repository info: {e}")
+        
+        # Create enhanced prompt with command results
+        enhanced_prompt = self._create_lightweight_prompt_with_results(prompt, context, context_data, command_executions)
+        
+        # Log the enhanced prompt for debugging
+        print(f"\n📝 Enhanced Prompt Generated:")
+        print("=" * 80)
+        print(enhanced_prompt)
+        print("=" * 80)
+        print(f"📊 Enhancement Summary: {len(command_executions)} commands executed, {len(enhanced_prompt)} characters total\n")
+        
+        return SupplementedPrompt(
+            original_prompt=prompt,
+            supplemented_prompt=enhanced_prompt,
+            context_used=list(context_data.keys()) if context_data else [],
+            commands_executed=[],
+            metadata={
+                "mode": "lightweight",
+                "detected_intent": context.detected_intent,
+                "confidence": context.confidence,
+                "context_types": list(context_data.keys()),
+                "execution_time": 0.001  # Very fast
+            }
+        )
+    
+    def _full_enhancement(self, prompt: str, context: PromptContext) -> SupplementedPrompt:
+        """Provide full enhancement with complete context analysis."""
         print(f"🔧 Planned Commands: {', '.join(context.supplemental_commands)}")
         
         # Gather contextual information by executing commands
@@ -310,6 +504,13 @@ class PromptInterceptor:
         
         # Supplement the prompt
         supplemented = self._supplement_prompt(prompt, context, context_data, command_executions)
+        
+        # Log the enhanced prompt for debugging
+        print(f"\n📝 Enhanced Prompt Generated (Full Mode):")
+        print("=" * 80)
+        print(supplemented.supplemented_prompt)
+        print("=" * 80)
+        print(f"📊 Enhancement Summary: {len(command_executions)} commands executed, {len(supplemented.supplemented_prompt)} characters total\n")
         
         return supplemented
     
@@ -627,6 +828,131 @@ class PromptInterceptor:
             }
         )
     
+    def _create_lightweight_prompt(self, original_prompt: str, context: PromptContext, context_data: Dict[str, str]) -> str:
+        """Create a lightweight enhanced prompt with minimal context."""
+        if not context_data:
+            # No context available, return original prompt
+            return original_prompt
+        
+        # Create a minimal context summary
+        context_summary = []
+        if "basic_repository_info" in context_data:
+            context_summary.append("🔍 Repository Context Available")
+        
+        # Add command recommendations if available
+        prompt_parts = []
+        if "command_recommendations" in context_data:
+            recommendations = context_data["command_recommendations"]
+            if recommendations:
+                prompt_parts.append("**Recommended Commands Available:**")
+                for rec in recommendations[:3]:  # Top 3 recommendations
+                    prompt_parts.append(f"- {rec['command']} (confidence: {rec['confidence']:.1%}) - {rec['description']}")
+                prompt_parts.append("")
+        
+        if context_summary:
+            prompt_parts.append(f"**Context**: {' | '.join(context_summary)}")
+        
+        prompt_parts.extend([
+            f"**Query**: {original_prompt}",
+            "",
+            "Provide a focused response using available context and command recommendations."
+        ])
+        
+        return "\n".join(prompt_parts) if prompt_parts else original_prompt
+    
+    def _execute_command_safely(self, command_name: str) -> Optional[str]:
+        """Safely execute a command and return its result."""
+        try:
+            # Map command names to their execution functions
+            command_map = {
+                "analyze_repo_structure": self._execute_analyze_repository_context,
+                "analyze_repo_languages": self._execute_analyze_repo_languages,
+                "analyze_repo_directories": self._execute_analyze_repo_directories,
+                "get_repository_state": self._execute_get_repository_state,
+                "read_file": lambda: "File reading requires specific file path",
+                "write_file": lambda: "File writing requires content and path",
+                "list_files": self._execute_list_files,
+                "duck_search": lambda: "Web search requires specific query",
+                "fetch_url": lambda: "URL fetch requires specific URL",
+                "run_python": lambda: "Python execution requires specific code"
+            }
+            
+            if command_name in command_map:
+                return command_map[command_name]()
+            else:
+                return f"Unknown command: {command_name}"
+                
+        except Exception as e:
+            print(f"     ⚠️  Command {command_name} failed: {e}")
+            return None
+    
+    def _execute_list_files(self) -> str:
+        """Execute file listing in current directory."""
+        try:
+            import os
+            files = os.listdir(".")
+            dirs = [f for f in files if os.path.isdir(f)]
+            files = [f for f in files if os.path.isfile(f)]
+            
+            result = []
+            if dirs:
+                result.append(f"Directories ({len(dirs)}): {', '.join(dirs)}")
+            
+            if files:
+                result.append(f"Files ({len(files)}): {', '.join(files)}")
+            
+            return "\n".join(result) if result else "No files or directories found"
+            
+        except Exception as e:
+            return f"Error listing files: {e}"
+    
+    def _create_lightweight_prompt_with_results(self, original_prompt: str, context: PromptContext, 
+                                               context_data: Dict[str, str], command_executions: List[CommandExecution]) -> str:
+        """Create a lightweight enhanced prompt with actual command execution results."""
+        if not context_data:
+            return original_prompt
+        
+        prompt_parts = [
+            f"**User Query:** {original_prompt}",
+            "",
+            "**Context Information:**"
+        ]
+        
+        # Add command execution results
+        executed_commands = [cmd for cmd in command_executions if cmd.success]
+        if executed_commands:
+            prompt_parts.append("**Command Execution Results:**")
+            
+            for cmd in executed_commands:
+                command_key = f"command_{cmd.command_name}"
+                if command_key in context_data:
+                    result = context_data[command_key]
+                    prompt_parts.extend([
+                        f"",
+                        f"**{cmd.command_name}** (executed in {cmd.duration:.2f}s):",
+                        result[:1000] + ("..." if len(result) > 1000 else ""),  # Truncate long results
+                        ""
+                    ])
+        
+        # Add any other context data
+        for key, value in context_data.items():
+            if not key.startswith("command_"):
+                prompt_parts.extend([
+                    f"**{key.replace('_', ' ').title()}:**",
+                    value[:800] + ("..." if len(value) > 800 else ""),
+                    ""
+                ])
+        
+        # Add instructions
+        prompt_parts.extend([
+            "**Instructions:**",
+            f"Based on the above context information and command results, please answer: {original_prompt}",
+            "Use the provided context to give accurate, specific answers about this repository/project.",
+            ""
+        ])
+        
+        return "\n".join(prompt_parts)
+    
     # Command execution methods
     def _execute_analyze_repository_context(self) -> str:
         """Execute repository context analysis."""
@@ -720,12 +1046,45 @@ def get_prompt_interceptor() -> PromptInterceptor:
     return _prompt_interceptor_instance
 
 
-def intercept_and_enhance_prompt(prompt: str, working_directory: str = None, repository_url: str = None) -> SupplementedPrompt:
+def _ensure_virtual_repository(repo_url: str):
+    """Ensure virtual repository is downloaded and cached for the given URL."""
+    try:
+        from src.core.helpers import get_virtual_repository, download_github_zip_to_memory
+        from pathlib import Path
+        
+        print(f"🔍 Checking virtual repository for: {repo_url}")
+        
+        # Check if already cached
+        virtual_repo = get_virtual_repository(repo_url)
+        if virtual_repo:
+            print(f"✅ Virtual repository already cached ({len(virtual_repo.files)} files)")
+            return  # Already available
+        
+        print(f"📥 Downloading and caching repository...")
+        # Use the data directory for persistence
+        data_dir = Path("data")
+        data_dir.mkdir(exist_ok=True)
+        
+        success = download_github_zip_to_memory(repo_url, data_dir)
+        if success:
+            print(f"✅ Repository downloaded and cached successfully")
+        else:
+            print(f"⚠️  Failed to download repository: {repo_url}")
+            
+    except Exception as e:
+        print(f"⚠️  Error ensuring virtual repository: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def intercept_and_enhance_prompt(prompt: str, working_directory: str = None, repository_url: str = None, mode: InterceptionMode = InterceptionMode.SMART) -> SupplementedPrompt:
     """Convenience function to intercept and enhance a prompt."""
     interceptor = get_prompt_interceptor()
     if repository_url:
         interceptor._current_repo_url = repository_url
-    return interceptor.intercept_and_enhance(prompt, working_directory)
+        # Ensure virtual repository is initialized for the URL
+        _ensure_virtual_repository(repository_url)
+    return interceptor.intercept_and_enhance(prompt, working_directory, mode)
 
 
 if __name__ == "__main__":

@@ -33,3 +33,77 @@ agents:
       - analyze_repo_directories
     system_message: |
       You are DeepCoder, an advanced AI coding assistant.
+
+  phi3_mini:
+    name: "Phi-3 Mini"
+    backend_image: "phi3:mini"
+    description: "Microsoft's compact and efficient coding assistant"
+    capabilities:
+      coding: true
+      general_qa: true
+      file_operations: true
+      streaming: true
+    parameters:
+      temperature: 0.4
+      num_ctx: 4096
+      num_predict: 512
+      repeat_penalty: 1.1
+      top_k: 40
+      top_p: 0.9
+    tools:
+      - write_file
+      - read_file
+      - append_file
+      - list_files
+      - delete_file
+      - copy_file
+      - create_project
+      - get_system_info
+      - generate_documentation
+      - run_python
+      - fetch_url
+      - duck_search
+      - analyze_repo_structure
+      - analyze_repo_languages
+      - analyze_repo_directories
+    system_message: |
+      You are Phi-3 Mini, a compact and efficient AI coding assistant.
+      
+      Your capabilities include:
+      - Code analysis and understanding
+      - File operations and repository exploration
+      - Documentation generation
+      - Problem-solving and debugging
+      - Multiple programming language support
+      
+      Always provide clear, concise, and accurate responses while being helpful and professional.
+
+  interceptor:
+    name: "Prompt Interceptor Agent"
+    backend_image: "phi3:mini"  # Using lightweight model for fast responses
+    description: "Specialized agent for analyzing prompts and recommending appropriate commands"
+    capabilities:
+      coding: false
+      general_qa: true
+      file_operations: false
+      streaming: true
+      prompt_analysis: true
+    parameters:
+      temperature: 0.1  # Low temperature for consistent results
+      num_ctx: 2048
+      num_predict: 512
+      repeat_penalty: 1.0
+      top_k: 10
+      top_p: 0.8
+    tools: []  # No external tools needed - pure analysis
+    system_message: |
+      You are the Prompt Interceptor Agent, specialized in analyzing user prompts and recommending appropriate commands.
+      
+      Your primary responsibilities:
+      - Analyze user prompts to understand intent
+      - Recommend relevant commands based on prompt content
+      - Provide confidence scores for recommendations
+      - Identify required context for command execution
+      - Deliver fast, consistent, and accurate analysis
+      
+      Always respond with structured command recommendations and confidence levels.

@@ -63,6 +63,18 @@
       "help": "Fast all: disable tokenization & streaming everywhere",
       "dest": "fast_all"
     },
+    "interception-mode": {
+      "type": "str",
+      "default": "smart",
+      "choices": ["full", "lightweight", "smart"],
+      "help": "Prompt interception mode: 'full' (complete analysis), 'lightweight' (fast minimal context), 'smart' (adaptive)",
+      "dest": "interception_mode"
+    },
+    "stream": {
+      "action": "store_true",
+      "help": "Force streaming output (bypasses server mode for real-time response)",
+      "dest": "force_streaming"
+    },
     "server": {
       "action": "store_true",
       "help": "Run API server (replaces start_server scripts)"

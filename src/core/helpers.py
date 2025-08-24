@@ -642,6 +642,48 @@ def clear_repository_cache():
     print("🧹 Repository cache cleared")
 
 
+def _ensure_virtual_repository(git_url: str) -> bool:
+    """Ensure a virtual repository is available for the given URL."""
+    try:
+        # Check if virtual repository already exists
+        virtual_repo = get_virtual_repository(git_url)
+        if virtual_repo:
+            print(f"⚡ Virtual repository already cached for: {git_url}")
+            return True
+        
+        # Try to download and create virtual repository
+        github_info = parse_github_url(git_url)
+        if not github_info:
+            print(f"⚠️  Not a GitHub URL, cannot create virtual repository: {git_url}")
+            return False
+        
+        owner = github_info['owner']
+        repo = github_info['repo'] 
+        branch = github_info['branch']
+        
+        print(f"⚡ Creating virtual repository for: {owner}/{repo}@{branch}")
+        
+        # Download ZIP to memory and create virtual repository
+        zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+        
+        with urllib.request.urlopen(zip_url) as response:
+            zip_data = response.read()
+        
+        print(f"✅ Downloaded ZIP ({len(zip_data) / 1024 / 1024:.1f} MB)")
+        
+        # Create and cache virtual repository
+        virtual_repo = VirtualRepository(git_url, zip_data)
+        cache_virtual_repository(git_url, virtual_repo)
+        
+        print(f"✅ Virtual repository created: {virtual_repo.metadata['total_files']} files")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Failed to ensure virtual repository: {e}")
+        return False
+
+
 def get_clone_directory(git_url: str, base_path: str = None) -> Path:
     """Get the directory path where a repository should be cloned."""
     if base_path is None:
@@ -797,7 +839,7 @@ def requires_repository(capabilities: List[AgentCapability]) -> bool:
     return AgentCapability.CODE in capabilities or AgentCapability.REPO_ANALYSIS in capabilities
 
 
-def validate_repository_requirement(agent_name: str, path: str = ".", git_url: Optional[str] = None, data_path: Optional[str] = None, optional: bool = False) -> Tuple[bool, Optional[str]]:
+def validate_repository_requirement(agent_name: str, path: str = ".", git_url: Optional[str] = None, data_path: Optional[str] = None, optional: bool = False, interception_mode: str = "smart") -> Tuple[bool, Optional[str]]:
     """
     Validate that coding agents are run in a git repository or clone from URL.
     
@@ -807,6 +849,7 @@ def validate_repository_requirement(agent_name: str, path: str = ".", git_url: O
         git_url: Optional git URL to clone if not in a repository
         data_path: Optional custom data directory path for clones
         optional: If True, allows coding agents to work without repositories
+        interception_mode: Mode for prompt interception (lightweight/full/smart)
         
     Returns:
         Tuple of (validation_passed, working_directory)
@@ -817,8 +860,21 @@ def validate_repository_requirement(agent_name: str, path: str = ".", git_url: O
     capabilities = get_agent_capabilities(agent_name)
     
     if requires_repository(capabilities):
-        # If git URL is provided, always prioritize cloning the specified repository
+        # If git URL is provided, handle based on interception mode
         if git_url:
+            # For lightweight mode, use virtual repository instead of full cloning
+            if interception_mode == "lightweight":
+                print(f"⚡ Using lightweight mode - virtual repository for: {git_url}")
+                try:
+                    # Ensure virtual repository is available
+                    _ensure_virtual_repository(git_url)
+                    return True, path  # Stay in current directory
+                except Exception as e:
+                    print(f"⚠️  Virtual repository setup failed: {e}")
+                    # Fallback to normal cloning if virtual fails
+                    pass
+            
+            # Normal cloning for full mode or fallback
             clone_dir = get_clone_directory(git_url, data_path)
             if clone_repository(git_url, clone_dir):
                 return True, str(clone_dir)

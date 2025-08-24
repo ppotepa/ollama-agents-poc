@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 
-def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None) -> str:
+def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False) -> str:
     """Run a single query with cognitive command interpretation and connection mode support."""
     connection = None
     try:
@@ -14,10 +14,18 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         
         # **PROMPT INTERCEPTION**: Intercept and enhance the prompt with contextual information
         print(f"🧠 Intercepting and analyzing prompt...")
-        from src.core.prompt_interceptor import intercept_and_enhance_prompt
+        from src.core.prompt_interceptor import intercept_and_enhance_prompt, InterceptionMode
+        
+        # Convert string mode to enum
+        mode_map = {
+            "full": InterceptionMode.FULL,
+            "lightweight": InterceptionMode.LIGHTWEIGHT,
+            "smart": InterceptionMode.SMART
+        }
+        mode = mode_map.get(interception_mode.lower(), InterceptionMode.SMART)
         
         try:
-            supplemented = intercept_and_enhance_prompt(query, os.getcwd(), repository_url)
+            supplemented = intercept_and_enhance_prompt(query, os.getcwd(), repository_url, mode)
             
             # Show what was detected and enhanced
             if supplemented.context_used:
@@ -28,6 +36,14 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
                 # Use the supplemented prompt instead of the original
                 enhanced_query = supplemented.supplemented_prompt
                 print(f"✨ Prompt enhanced with contextual information")
+                
+                # **CONFIRM WHAT'S BEING SENT TO AGENT**
+                print(f"\n🎯 SENDING TO AGENT:")
+                print(f"📏 Enhanced query length: {len(enhanced_query)} characters")
+                print(f"🔤 First 200 chars: {enhanced_query[:200]}...")
+                if len(enhanced_query) > 200:
+                    print(f"🔤 Last 200 chars: ...{enhanced_query}")
+                print()
             else:
                 enhanced_query = query
                 print(f"📝 No contextual enhancement applied")
@@ -56,31 +72,39 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         
         print(f"✅ Connection established via {connection_mode} mode")
         
-        # First, try to resolve the query using CommandResolver
-        from src.core.command_resolver import resolve_user_input
-        
-        print(f"🧠 Attempting cognitive command resolution...")
-        resolved_command = resolve_user_input(enhanced_query)
-        
-        if resolved_command:
-            print(f"🧠 Command resolved: {resolved_command.command_name} (confidence: {resolved_command.confidence:.2f})")
+        # First, try to resolve the query using CommandResolver (skip if forcing streaming)
+        if not force_streaming:
+            from src.core.command_resolver import resolve_user_input
             
-            if resolved_command.confidence >= 0.6:  # Lowered threshold for better coverage
-                print(f"📋 Description: {resolved_command.description}")
+            print(f"🧠 Attempting cognitive command resolution...")
+            resolved_command = resolve_user_input(enhanced_query)
+            
+            if resolved_command:
+                print(f"🧠 Command resolved: {resolved_command.command_name} (confidence: {resolved_command.confidence:.2f})")
                 
-                # Try to execute the resolved command
-                try:
-                    result = execute_resolved_command(resolved_command, enhanced_query)
-                    if result:
-                        return result
-                except Exception as e:
-                    print(f"⚠️  Command execution failed, falling back to agent: {e}")
+                if resolved_command.confidence >= 0.6:  # Lowered threshold for better coverage
+                    print(f"📋 Description: {resolved_command.description}")
+                    
+                    # Try to execute the resolved command
+                    try:
+                        result = execute_resolved_command(resolved_command, enhanced_query)
+                        if result:
+                            return result
+                    except Exception as e:
+                        print(f"⚠️  Command execution failed, falling back to agent: {e}")
+                else:
+                    print(f"⚠️  Confidence too low ({resolved_command.confidence:.2f}), falling back to agent")
             else:
-                print(f"⚠️  Confidence too low ({resolved_command.confidence:.2f}), falling back to agent")
+                print(f"🧠 No command resolved, falling back to agent")
         else:
-            print(f"🧠 No command resolved, falling back to agent")
+            print(f"🎬 Skipping command resolution - forcing agent streaming")
         
-        # Fall back to agent-based processing via server
+        # Fall back to agent-based processing
+        if force_streaming:
+            print(f"🎬 Forcing direct streaming connection...")
+            return run_single_query_direct_ollama(enhanced_query, agent_name)
+        
+        # Use server-based processing (default)
         print(f"🤖 Using server-based agent processing for enhanced query")
         
         try:
@@ -151,13 +175,16 @@ def run_single_query_direct_ollama(query: str, agent_name: str) -> str:
         
         # Check if this is a sophisticated agent with streaming
         if hasattr(agent, 'stream') and callable(getattr(agent, 'stream')):
-            # For single query mode, we'll collect the streamed response
+            # For single query mode, we'll show streaming tokens and collect the response
             result_parts = []
-            def collect_token(token):
+            def collect_and_display_token(token):
+                print(token, end='', flush=True)  # Show streaming tokens in real-time
                 result_parts.append(token)
             
-            agent.stream(query, collect_token)
+            print(f"🎬 Streaming response:")
+            agent.stream(query, collect_and_display_token)
             result = ''.join(result_parts)
+            print(f"\n")  # Add newline after streaming
         else:
             # This is a simple agent
             result = agent.run_query(query)
