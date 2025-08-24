@@ -40,9 +40,7 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
                 # **CONFIRM WHAT'S BEING SENT TO AGENT**
                 print(f"\n🎯 SENDING TO AGENT:")
                 print(f"📏 Enhanced query length: {len(enhanced_query)} characters")
-                print(f"🔤 First 200 chars: {enhanced_query[:200]}...")
-                if len(enhanced_query) > 200:
-                    print(f"🔤 Last 200 chars: ...{enhanced_query}")
+                print(f"🔤 First 200 chars: {enhanced_query}...")                
                 print()
             else:
                 enhanced_query = query
