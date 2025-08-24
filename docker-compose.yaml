@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - d:/containers/ollama/models:/root/.ollama
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=2          # na 128 GB RAM spokojnie 2 modele naraz
+      - OLLAMA_FLASH_ATTENTION=1            # szybsze attention (GPU)
+      - OLLAMA_NO_CACHE=1                   # zawsze liczy na żywo
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        limits:
+          memory: 120g                      # zostaw trochę RAM dla systemu
+          cpus: '12'                        # wszystkie P-cores 12600K
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    runtime: nvidia
+    gpus: all
+
+  agent-server:
+    image: python:3.11-slim
+    container_name: agent-server
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./server.py:/app/server.py:ro
+    command: >
+      sh -c "
+        pip install --no-cache-dir fastapi uvicorn pydantic requests &&
+        uvicorn server:app --host 0.0.0.0 --port 8000 --no-server-header --timeout-keep-alive 30
+      "
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+    environment:
+      - PYTHONUNBUFFERED=1
+      - UVICORN_RELOAD=false
+
+networks:
+  default:
+    name: ollama-net

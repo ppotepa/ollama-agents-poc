@@ -1,0 +1,31 @@
+# Core LangChain dependencies
+langchain
+langchain-core
+langchain-ollama
+
+# Web framework dependencies (for server.py)
+fastapi
+uvicorn
+pydantic
+
+# Enhanced agent dependencies
+requests
+urllib3
+
+# System and file operations
+pathlib2
+glob2
+
+# Additional utilities for enhanced functionality
+python-dotenv
+psutil
+colorama
+
+# Development and testing tools
+pytest
+black
+flake8
+
+# Optional: Enhanced terminal features
+rich
+click

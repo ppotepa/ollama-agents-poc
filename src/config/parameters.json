@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "arguments": {
+    "agent": {
+      "type": "str",
+      "help": "Directly specify agent to use",
+      "dest": "agent"
+    },
+    "model": {
+      "type": "str",
+      "help": "(Deprecated) specify model (alias of --agent)",
+      "dest": "agent"
+    },
+    "list-agents": {
+      "action": "store_true",
+      "help": "List available agents"
+    },
+    "list-models": {
+      "action": "store_true",
+      "help": "(Deprecated) list models"
+    },
+    "config-dir": {
+      "type": "str",
+      "help": "Configuration directory path"
+    },
+    "q": {
+      "type": "str",
+      "help": "Initial query for the agent (skips to chat)",
+      "dest": "query",
+      "metavar": "QUERY"
+    },
+    "query": {
+      "type": "str",
+      "help": "Initial query for the agent (skips to chat)",
+      "dest": "query"
+    },
+    "g": {
+      "type": "str",
+      "help": "Git repository URL (required for coding agents)",
+      "dest": "git_repo",
+      "metavar": "REPO_URL"
+    },
+    "git-repo": {
+      "type": "str",
+      "help": "Git repository URL (required for coding agents)",
+      "dest": "git_repo"
+    },
+    "f": {
+      "action": "store_true",
+      "help": "Fast menus: skip tokenized output for menus",
+      "dest": "fast"
+    },
+    "fa": {
+      "action": "store_true",
+      "help": "Fast all: disable tokenization & streaming everywhere",
+      "dest": "fast_all"
+    },
+    "server": {
+      "action": "store_true",
+      "help": "Run API server (replaces start_server scripts)"
+    },
+    "host": {
+      "type": "str",
+      "default": "0.0.0.0",
+      "help": "Server host (with --server)"
+    },
+    "port": {
+      "type": "int",
+      "default": 8000,
+      "help": "Server port (with --server)"
+    }
+  },
+  "subcommands": {
+    "repo": {
+      "help": "Repository operations",
+      "arguments": {
+        "analyze": {
+          "action": "store_true",
+          "help": "Analyze repository structure"
+        },
+        "clone": {
+          "action": "store_true",
+          "help": "Clone repository locally"
+        },
+        "path": {
+          "type": "str",
+          "help": "Path to clone repository to"
+        }
+      }
+    }
+  }
+}

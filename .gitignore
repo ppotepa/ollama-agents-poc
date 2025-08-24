@@ -1,0 +1,104 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Python libraries and packages
+lib/
+lib64/
+Lib/
+include/
+Scripts/
+bin/
+share/
+pyvenv.cfg
+site-packages/
+
+# IDE files
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Heavy model files (exclude models folder and large model files)
+models/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+
+# Docker volumes and data
+volumes/
+data/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Node modules (if any)
+node_modules/
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Include important files (allow all folders except models)
+!requirements.txt
+!setup.py
+!pyproject.toml
+!README.md
+!LICENSE
+!.gitignore
+!docker-compose.yaml
+!Dockerfile
+
+# Include configuration files
+!*.yaml
+!*.yml
+!*.json
+!*.toml
+
+# Include scripts
+!*.sh
+!*.bat
+!*.ps1

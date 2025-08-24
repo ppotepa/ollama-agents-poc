@@ -1,0 +1,273 @@
+﻿name: Local Assistant
+version: 1.0.0
+schema: v1
+
+settings:
+  defaultMode: agent
+  defaultAssistant: DeepCoder Agent (Local)
+
+models:
+  # DeepSeek Coder (GPU)
+  - name: DeepSeek Coder Optimized
+    provider: ollama
+    model: deepseek-coder:6.7b
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # DeepSeek Coder (CPU only)
+  - name: DeepSeek Coder RAM
+    provider: ollama
+    model: deepseek-coder:6.7b
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # DeepSeek Agent Server (tools-enabled)
+  - name: DeepSeek Local Agent (Server)
+    provider: openai
+    model: deepseek-agent
+    apiBase: http://localhost:8000/v1
+    params:
+      temperature: 0.2
+      max_tokens: 1024
+    supportsTools: true
+    supportsToolCalls: true
+    supportsFunctionCalling: true
+    supportsAgentMode: true
+    toolCallTranslation: true
+    tools: ["code", "docs", "diff", "terminal", "problems", "folder", "codebase", "files"]
+
+  # Mistral (GPU)
+  - name: Mistral Assistant
+    provider: ollama
+    model: mistral:7b-instruct-q4_K_M
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # Mistral (CPU only)
+  - name: Mistral RAM
+    provider: ollama
+    model: mistral:7b-instruct-q4_K_M
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # CodeLlama 13B (GPU)
+  - name: CodeLlama 13B Optimized
+    provider: ollama
+    model: codellama:13b-instruct
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # CodeLlama 13B (CPU only)
+  - name: CodeLlama 13B RAM
+    provider: ollama
+    model: codellama:13b-instruct
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # Phi-3 Mini (fast & light)
+  - name: Phi-3 Mini
+    provider: ollama
+    model: phi3:mini
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 2048
+      num_predict: 256
+      temperature: 0.6
+
+  # Gemma 7B
+  - name: Gemma 7B
+    provider: ollama
+    model: gemma:7b-instruct-q4_K_M
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 512
+      temperature: 0.7
+
+  # Qwen 2.5 7B (tools-enabled agent)
+  - name: Qwen 2.5 7B Agent
+    provider: ollama
+    model: qwen2.5:7b-instruct-q4_K_M
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 1024
+      temperature: 0.7
+
+  # Qwen 2.5 3B (fast helper)
+  - name: Qwen 2.5 3B Fast
+    provider: ollama
+    model: qwen2.5:3b-instruct-q4_K_M
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 768
+      temperature: 0.7
+
+  # Llama 3.3 70B (q3 — very heavy)
+  - name: Llama 3.3 70B (q3 Optimized for 80GB RAM)
+    provider: ollama
+    model: llama3.3:70b-instruct-q3_K_M
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 1024
+      temperature: 0.2
+
+  # Llama 3.3 70B (CPU-only fallback)
+  - name: Llama 3.3 70B (q2 CPU)
+    provider: ollama
+    model: llama3.3:70b-instruct-q2_K
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 4096
+      num_predict: 768
+      temperature: 0.2
+
+  # DeepCoder 14B (local coding model)
+  - name: DeepCoder 14B
+    provider: ollama
+    model: deepcoder:14b
+    apiBase: http://localhost:11434
+    params:
+      num_ctx: 8192
+      num_predict: 1024
+      temperature: 0.2
+      num_gpu_layers: 24     # good start for 8 GB VRAM; adjust if needed
+      kv_cache: cpu
+      flash_attention: true
+
+agents:
+  - name: Coding Agent (GPU)
+    model: DeepSeek Coder Optimized
+    role: coding-assistant
+    server: http://localhost:8000
+
+  - name: Coding Agent (RAM)
+    model: DeepSeek Coder RAM
+    role: coding-assistant
+    server: http://localhost:8000
+
+  - name: DeepSeek Agent (Local)
+    model: DeepSeek Local Agent (Server)
+    role: coding-assistant
+    agentMode: true
+    tools: ["code", "docs", "diff", "terminal", "problems", "folder", "codebase", "files"]
+    server: http://localhost:8000
+
+  - name: Chat Agent (GPU)
+    model: Mistral Assistant
+    role: general-assistant
+    server: http://localhost:8000
+
+  - name: Chat Agent (RAM)
+    model: Mistral RAM
+    role: general-assistant
+    server: http://localhost:8000
+
+  - name: Explainer Agent (GPU)
+    model: CodeLlama 13B Optimized
+    role: explainer
+    server: http://localhost:8000
+
+  - name: Explainer Agent (RAM)
+    model: CodeLlama 13B RAM
+    role: explainer
+    server: http://localhost:8000
+
+  - name: Quick Helper
+    model: Phi-3 Mini
+    role: lightweight-assistant
+    server: http://localhost:8000
+
+  - name: Balanced Assistant
+    model: Gemma 7B
+    role: balanced-assistant
+    server: http://localhost:8000
+
+  - name: Qwen Agent (Local)   # 🚀 new tools-enabled agent
+    model: Qwen 2.5 7B Agent
+    role: coding-assistant
+    agentMode: true
+    supportsTools: true
+    supportsToolCalls: true
+    supportsFunctionCalling: true
+    supportsAgentMode: true
+    toolCallTranslation: true
+    tools: ["code", "docs", "diff", "terminal", "problems", "folder", "codebase", "files"]
+    toolPrompt: |
+      Always use the built-in tools when they help.
+      To create a file, call:
+      { "name": "files", "arguments": { "action": "create", "filepath": "...", "contents": "..." } }
+      To edit a file, call:
+      { "name": "files", "arguments": { "action": "write", "filepath": "...", "contents": "..." } }
+      To execute a command, call:
+      { "name": "terminal", "arguments": { "command": "..." } }
+      Use only: files, code, terminal, docs, diff, problems, folder, codebase.
+    server: http://localhost:8000
+
+  - name: Qwen Fast Helper
+    model: Qwen 2.5 3B Fast
+    role: general-assistant
+    server: http://localhost:8000
+
+  - name: Llama 3.3 Agent (Local)
+    model: Llama 3.3 70B (q3 Optimized for 80GB RAM)
+    role: coding-assistant
+    agentMode: true
+    supportsTools: true
+    supportsToolCalls: true
+    supportsFunctionCalling: true
+    supportsAgentMode: true
+    toolCallTranslation: true
+    tools: ["code", "docs", "diff", "terminal", "problems", "folder", "codebase", "files"]
+    server: http://localhost:8000
+
+  - name: Llama 3.3 Chat (Local)
+    model: Llama 3.3 70B (q3 Optimized for 80GB RAM)
+    role: general-assistant
+    server: http://localhost:8000
+
+  - name: DeepCoder Agent (Local)
+    model: DeepCoder 14B
+    role: coding-assistant
+    agentMode: true
+    supportsTools: true
+    supportsToolCalls: true
+    supportsFunctionCalling: true
+    supportsAgentMode: true
+    toolCallTranslation: true
+    tools: ["code","docs","diff","terminal","problems","folder","codebase","files"]
+    toolPrompt: |
+      Prefer tool use for file edits, running tests, and repo exploration.
+      - Create file: { "name": "files", "arguments": { "action": "create", "filepath": "...", "contents": "..." } }
+      - Edit file:   { "name": "files", "arguments": { "action": "write",  "filepath": "...", "contents": "..." } }
+      - Run cmd:     { "name": "terminal", "arguments": { "command": "..." } }
+    server: http://localhost:8000
+
+context:
+  - provider: code
+  - provider: docs
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase

@@ -1,0 +1,118 @@
+models:
+  deepcoder_basic:
+    name: "DeepCoder Basic"
+    model_id: "deepcoder:14b"
+    provider: "ollama"
+    description: "Advanced AI coding assistant specialized for software development"
+    capabilities:
+      coding: true
+      general_qa: true
+      file_operations: true
+      streaming: true
+    parameters:
+      temperature: 0.1
+      num_ctx: 16384
+      num_predict: 2048
+      repeat_penalty: 1.1
+      top_k: 40
+      top_p: 0.9
+    tools:
+      - file_ops
+      - system
+      - project
+      - code_execution
+      - web
+    system_message: |
+      You are DeepCoder, an advanced AI coding assistant with comprehensive capabilities similar to GitHub Copilot.
+      
+      CORE PRINCIPLES:
+      1. Always execute actions immediately when requested - don't ask for permission
+      2. Provide complete, working code solutions
+      3. Use the available tools to perform file operations, run commands, and manage projects
+      4. Focus on practical, actionable solutions
+      5. Be concise but thorough in explanations
+    
+  llama:
+    name: "Llama 3.2"
+    model_id: "llama3.2:latest"
+    provider: "ollama"
+    description: "General-purpose conversational AI with broad knowledge"
+    capabilities:
+      coding: true
+      general_qa: true
+      file_operations: false
+      streaming: true
+    parameters:
+      temperature: 0.7
+      num_ctx: 8192
+      num_predict: 1024
+    tools:
+      - system
+      - web
+    system_message: |
+      You are a helpful AI assistant based on Llama 3.2. You can answer questions,
+      help with problem-solving, and provide information on a wide range of topics.
+      
+  codellama:
+    name: "Code Llama"
+    model_id: "codellama:latest"
+    provider: "ollama"
+    description: "Specialized coding assistant for programming tasks"
+    capabilities:
+      coding: true
+      general_qa: false
+      file_operations: true
+      streaming: true
+    parameters:
+      temperature: 0.1
+      num_ctx: 16384
+      num_predict: 2048
+    tools:
+      - file_ops
+      - project
+      - code_execution
+    system_message: |
+      You are Code Llama, a specialized AI assistant for programming and software development.
+      Focus on providing accurate, efficient code solutions and technical guidance.
+      
+  gemma:
+    name: "Gemma 2"
+    model_id: "gemma2:latest"
+    provider: "ollama"
+    description: "Google's lightweight and efficient language model"
+    capabilities:
+      coding: true
+      general_qa: true
+      file_operations: false
+      streaming: true
+    parameters:
+      temperature: 0.5
+      num_ctx: 8192
+      num_predict: 1024
+    tools:
+      - system
+    system_message: |
+      You are Gemma, an AI assistant created by Google. You're helpful, harmless, and honest.
+      You can assist with various tasks including coding, analysis, and general questions.
+
+  qwen:
+    name: "Qwen 2.5"
+    model_id: "qwen2.5:latest"
+    provider: "ollama"
+    description: "Alibaba's multilingual AI model with strong reasoning capabilities"
+    capabilities:
+      coding: true
+      general_qa: true
+      file_operations: true
+      streaming: true
+    parameters:
+      temperature: 0.3
+      num_ctx: 12288
+      num_predict: 1536
+    tools:
+      - file_ops
+      - system
+      - project
+    system_message: |
+      You are Qwen, an AI assistant with strong analytical and reasoning capabilities.
+      You excel at problem-solving, coding, and providing detailed explanations.
