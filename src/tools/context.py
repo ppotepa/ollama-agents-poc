@@ -859,16 +859,11 @@ if LANGCHAIN_AVAILABLE:
                analyze_repository_context, analyze_repo_languages, analyze_repo_directories, get_repository_state]:
         register_tool(StructuredTool.from_function(fn, name=fn.__name__, description=fn.__doc__ or fn.__name__))
 else:
-    class _Wrap:
-        def __init__(self, fn):
-            self._fn = fn
-            self.name = fn.__name__
-            self.description = fn.__doc__ or fn.__name__
-        def __call__(self, *a, **kw):
-            return self._fn(*a, **kw)
+    # Use the standard ToolWrapper from registry
+    from src.tools.registry import ToolWrapper
     for _f in [build_repository_context, get_file_context, search_files, get_file_content,
                analyze_repository_context, analyze_repo_languages, analyze_repo_directories, get_repository_state]:
-        register_tool(_Wrap(_f))
+        register_tool(ToolWrapper(_f))
 
 
 __all__ = [

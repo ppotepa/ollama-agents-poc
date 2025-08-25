@@ -1,0 +1,15 @@
+{
+  "mistral": true,
+  "mistral:7b": true,
+  "granite3.3:8b": true,
+  "nemotron-mini:4b": false,
+  "codellama:13b-instruct": false,
+  "codellama:13b-instruct-q4_0": false,
+  "codellama:13b-instruct-q4_K_M": false,
+  "gemma:7b-instruct-q4_K_M": false,
+  "llama3.3:70b-instruct-q2_K": false,
+  "deepcoder:14b": false,
+  "deepseek-coder:6.7b": false,
+  "qwen2.5-coder:7b": true,
+  "qwen2.5:7b-instruct-q4_K_M": true
+}

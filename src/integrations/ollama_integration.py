@@ -78,7 +78,9 @@ class OllamaIntegration(BaseIntegration):
             ["ollama", "list"], 
             capture_output=True, 
             text=True, 
-            timeout=10
+            timeout=10,
+            encoding='utf-8',
+            errors='replace'
         )
         if result.returncode == 0:
             return self._parse_cli_output(result.stdout)

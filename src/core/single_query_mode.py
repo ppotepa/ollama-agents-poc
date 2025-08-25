@@ -11,6 +11,7 @@ def run_intelligent_investigation(query: str, streaming: bool = True) -> str:
     """Run a query using the intelligent orchestrator for complex investigations."""
     try:
         from src.core.intelligent_orchestrator import get_orchestrator, ExecutionMode
+        from src.core.intelligence_enhancer import apply_intelligence_improvements, is_enhanced_investigation_enabled
         
         print(f"🧠 Starting intelligent investigation")
         print(f"🔍 Query: {query[:100]}...")
@@ -19,6 +20,11 @@ def run_intelligent_investigation(query: str, streaming: bool = True) -> str:
         
         # Get the orchestrator instance
         orchestrator = get_orchestrator(enable_streaming=streaming)
+        
+        # Apply intelligence improvements if enabled
+        if is_enhanced_investigation_enabled():
+            print("🚀 Using enhanced investigation capabilities")
+            apply_intelligence_improvements(orchestrator)
         
         # Run the investigation asynchronously
         async def run_investigation():
@@ -135,7 +141,7 @@ def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5
         return run_single_query(query, agent_name, collaborative=False, force_streaming=streaming)
 
 
-def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False, collaborative: bool = False, max_iterations: int = 5, intelligent_investigation: bool = False) -> str:
+def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False, collaborative: bool = False, max_iterations: int = 5, intelligent_investigation: bool = False, no_tools: bool = False) -> str:
     """Run a single query with cognitive command interpretation and connection mode support.
     
     Args:
@@ -270,7 +276,7 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         # Fall back to agent-based processing
         if force_streaming:
             print(f"🎬 Forcing direct streaming connection...")
-            return run_single_query_direct_ollama(enhanced_query, agent_name, interceptor_data, streaming=force_streaming)
+            return run_single_query_direct_ollama(enhanced_query, agent_name, interceptor_data, streaming=force_streaming, no_tools=no_tools)
         
         # Use server-based processing (default)
         print(f"🤖 Using server-based agent processing for enhanced query")
@@ -285,14 +291,14 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         
         # Final fallback to direct Ollama with enhanced query
         print(f"🔄 Falling back to direct Ollama connection...")
-        return run_single_query_direct_ollama(enhanced_query, agent_name, streaming=force_streaming)
+        return run_single_query_direct_ollama(enhanced_query, agent_name, streaming=force_streaming, no_tools=no_tools)
         
     except Exception as e:
         print(f"❌ Error in run_single_query: {e}")
         # Use enhanced query if available, otherwise use original
         fallback_query = enhanced_query if 'enhanced_query' in locals() else query
         fallback_interceptor_data = interceptor_data if 'interceptor_data' in locals() else None
-        return run_single_query_direct_ollama(fallback_query, agent_name, fallback_interceptor_data, streaming=force_streaming)
+        return run_single_query_direct_ollama(fallback_query, agent_name, fallback_interceptor_data, streaming=force_streaming, no_tools=no_tools)
     finally:
         # Clean up connection
         if connection:
@@ -336,14 +342,14 @@ def query_via_server(query: str, agent_name: str, server_url: str) -> str:
         raise
 
 
-def run_single_query_direct_ollama(query: str, agent_name: str, interceptor_data: dict = None, streaming: bool = True) -> str:
+def run_single_query_direct_ollama(query: str, agent_name: str, interceptor_data: dict = None, streaming: bool = True, no_tools: bool = False) -> str:
     """Original direct Ollama connection as fallback."""
     try:
         print(f"🔄 Using direct Ollama connection for fallback")
         
         # Use the helpers version which supports streaming
         from src.core.helpers import get_agent_instance as helpers_get_agent_instance
-        agent = helpers_get_agent_instance(agent_name, streaming=streaming)
+        agent = helpers_get_agent_instance(agent_name, streaming=streaming, with_tools=(not no_tools))
         
         # Prepare agent context with interceptor data
         agent_context = {}

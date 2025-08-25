@@ -116,15 +116,10 @@ if LANGCHAIN_AVAILABLE:
     for fn in [request_model_swap, suggest_better_model]:
         register_tool(StructuredTool.from_function(fn, name=fn.__name__, description=fn.__doc__ or fn.__name__))
 else:
-    class _Wrap:
-        def __init__(self, fn):
-            self._fn = fn
-            self.name = fn.__name__
-            self.description = fn.__doc__ or fn.__name__
-        def __call__(self, *a, **kw):  # pragma: no cover
-            return self._fn(*a, **kw)
+    # Use the standard ToolWrapper from registry
+    from src.tools.registry import ToolWrapper
     for _f in [request_model_swap, suggest_better_model]:
-        register_tool(_Wrap(_f))
+        register_tool(ToolWrapper(_f))
 
 
 __all__ = ["request_model_swap", "suggest_better_model"]

@@ -336,7 +336,7 @@ class ReflectionCheckpoint:
             "gemma:7b-instruct-q4_K_M": ["creative", "reasoning", "explanation"],
             "llama3.2:latest": ["research", "detailed_analysis", "comprehensive"],
             "phi3:latest": ["quick_tasks", "simple_coding", "fast_response"],
-            "codestral:latest": ["advanced_coding", "debugging", "code_review"],
+            "qwen2.5-coder:7b": ["advanced_coding", "debugging", "code_review"],  # Reliable tool-supporting model
             "deepseek-coder:6.7b-instruct-q4_K_M": ["coding", "technical", "implementation"]
         }
         
@@ -355,7 +355,7 @@ class ReflectionCheckpoint:
             elif "gemma" in current_model:
                 return "llama3.2:latest"
             else:
-                return "codestral:latest"
+                return "qwen2.5-coder:7b"  # Reliable tool-supporting model
         
         elif reason == "errors":
             # For errors, try a different approach
@@ -370,7 +370,7 @@ class ReflectionCheckpoint:
         
         elif reason == "failures":
             # For repeated failures, try most capable model
-            return "codestral:latest"
+            return "qwen2.5-coder:7b"  # Reliable tool-supporting model
         
         else:
             # Default: try qwen as general-purpose
@@ -399,7 +399,7 @@ class ReflectionCheckpoint:
         if "phi3" in current_model and metrics.completion_time > 120:
             suggestions.append("Consider using a more powerful model for complex tasks")
         
-        if "codestral" in current_model and metrics.error_count > 0:
+        if "coder" in current_model and metrics.error_count > 0:
             suggestions.append("Verify code syntax and dependencies before execution")
         
         # Context-based suggestions

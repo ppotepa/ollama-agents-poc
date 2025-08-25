@@ -29,17 +29,29 @@ class ModelConfig:
     @property
     def supports_coding(self) -> bool:
         """Check if model supports coding capabilities."""
-        return self.capabilities.get("coding", False)
+        if isinstance(self.capabilities, dict):
+            return self.capabilities.get("coding", False)
+        elif isinstance(self.capabilities, list):
+            return "coding" in self.capabilities
+        return False
     
     @property
     def supports_file_operations(self) -> bool:
         """Check if model supports file operations."""
-        return self.capabilities.get("file_operations", False)
+        if isinstance(self.capabilities, dict):
+            return self.capabilities.get("file_operations", False)
+        elif isinstance(self.capabilities, list):
+            return "file_operations" in self.capabilities
+        return False
     
     @property
     def supports_streaming(self) -> bool:
         """Check if model supports streaming."""
-        return self.capabilities.get("streaming", False)
+        if isinstance(self.capabilities, dict):
+            return self.capabilities.get("streaming", False)
+        elif isinstance(self.capabilities, list):
+            return "streaming" in self.capabilities
+        return False
 
 
 class ModelConfigReader:

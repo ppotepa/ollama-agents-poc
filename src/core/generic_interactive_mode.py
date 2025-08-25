@@ -468,10 +468,18 @@ class GenericInteractiveAgent:
 
 
 # Public functions for main.py compatibility
-def run_interactive_session(agent_name: str, stream_mode: bool = True):
+def run_interactive_session(agent_name: str, stream_mode: bool = True, no_tools: bool = False):
     """Run an interactive session with any agent."""
     try:
-        agent = GenericInteractiveAgent(agent_name, stream_mode=stream_mode)
+        # If tools are disabled, print a message
+        if no_tools:
+            print(f"🛑 Tools disabled (running in LLM-only mode)")
+            
+        # Get agent with appropriate tool settings
+        from src.core.helpers import get_agent_instance
+        agent = get_agent_instance(agent_name, streaming=stream_mode, with_tools=(not no_tools))
+        
+        # Run the interactive session
         agent.run_interactive_session()
     except Exception as e:
         print(f"❌ Error starting interactive session for '{agent_name}': {e}")

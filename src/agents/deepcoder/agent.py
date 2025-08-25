@@ -223,7 +223,7 @@ USER QUERY:
                 if not self._agent_executor:
                     stream_text("📝 Tools not supported by this model - continuing in LLM-only mode")
             else:
-                stream_text("📝 No tools configured - running in LLM-only mode")
+                stream_text("� No tools configured - running in LLM-only mode (tools functionality is limited)")
         else:
             stream_text("📝 LangChain not available - running in basic mode")
 

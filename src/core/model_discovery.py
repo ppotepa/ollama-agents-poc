@@ -19,6 +19,10 @@ except ImportError:
 class OllamaModelDiscovery:
     """Discovers available models from Ollama instance using multiple fallback methods."""
     
+    # Class-level cache to avoid repeated API calls
+    _cached_models = None
+    _cache_initialized = False
+    
     def __init__(self, ollama_base_url: str = "http://localhost:11434", docker_container: str = "ollama"):
         self.ollama_base_url = ollama_base_url
         self.docker_container = docker_container
@@ -30,13 +34,20 @@ class OllamaModelDiscovery:
         Returns:
             List of model configurations
         """
+        # Return cached models if available
+        if OllamaModelDiscovery._cache_initialized and OllamaModelDiscovery._cached_models:
+            return OllamaModelDiscovery._cached_models
+        
         models = []
         
         # Method 1: API call
         try:
             models = self._discover_via_api()
             if models:
-                self.logger.info(f"Found {len(models)} models via API")
+                if not OllamaModelDiscovery._cache_initialized:
+                    self.logger.info(f"Found {len(models)} models via API")
+                    OllamaModelDiscovery._cache_initialized = True
+                OllamaModelDiscovery._cached_models = models
                 return models
         except Exception as e:
             self.logger.warning(f"API discovery failed: {e}")
@@ -45,10 +56,19 @@ class OllamaModelDiscovery:
         try:
             models = self._discover_via_docker()
             if models:
-                self.logger.info(f"Found {len(models)} models via Docker")
+                if not OllamaModelDiscovery._cache_initialized:
+                    self.logger.info(f"Found {len(models)} models via Docker")
+                    OllamaModelDiscovery._cache_initialized = True
+                OllamaModelDiscovery._cached_models = models
                 return models
         except Exception as e:
             self.logger.warning(f"Docker discovery failed: {e}")
+    
+    @classmethod
+    def refresh_cache(cls):
+        """Refresh the cached model list."""
+        cls._cache_initialized = False
+        cls._cached_models = None
     
     def pull_model(self, model_name: str, progress_callback: Optional[Callable[[str], None]] = None) -> bool:
         """Pull a model using docker exec ollama ollama pull.
@@ -62,6 +82,9 @@ class OllamaModelDiscovery:
         """
         self.logger.info(f"Pulling model: {model_name}")
         
+        # Refresh cache as we're going to add a new model
+        OllamaModelDiscovery.refresh_cache()
+        
         cmd = ["docker", "exec", self.docker_container, "ollama", "pull", model_name]
         
         try:
@@ -70,7 +93,9 @@ class OllamaModelDiscovery:
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.STDOUT, 
                 text=True, 
-                bufsize=1
+                bufsize=1,
+                encoding='utf-8',
+                errors='replace'  # Handle encoding errors gracefully
             )
             
             if progress_callback:
@@ -105,10 +130,7 @@ class OllamaModelDiscovery:
             True if model is available (or successfully pulled), False otherwise
         """
         # First check if model is already available
-        available_models = self.discover_models()
-        model_names = [model.get('name', '') for model in available_models]
-        
-        if model_name in model_names:
+        if self.model_exists(model_name):
             return True
         
         if auto_pull:
@@ -116,6 +138,28 @@ class OllamaModelDiscovery:
             return self.pull_model(model_name)
         
         return False
+        
+    def model_exists(self, model_name: str) -> bool:
+        """Check if a model exists in the Ollama instance.
+        
+        Args:
+            model_name: Name of the model to check
+            
+        Returns:
+            True if the model exists, False otherwise
+        """
+        available_models = self.discover_models()
+        model_names = [model.get('name', '') for model in available_models]
+        
+        # Also check by model ID or partial matches
+        exists = any(
+            model_name == name or 
+            model_name in name or 
+            name.startswith(model_name)
+            for name in model_names
+        )
+        
+        return exists
         
         # Method 3: Models folder scan
         try:
@@ -169,7 +213,9 @@ class OllamaModelDiscovery:
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=10
+                timeout=10,
+                encoding='utf-8',
+                errors='replace'
             )
             
             models = []
@@ -401,6 +447,51 @@ def get_available_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
         get_logger().warning(f"Failed to cache models: {e}")
     
     return models
+
+
+# Global helper functions for easier access in other modules
+_discovery_instance = None
+
+def get_discovery_instance() -> OllamaModelDiscovery:
+    """Get a global instance of OllamaModelDiscovery."""
+    global _discovery_instance
+    if _discovery_instance is None:
+        _discovery_instance = OllamaModelDiscovery()
+    return _discovery_instance
+
+def model_exists(model_name: str) -> bool:
+    """Check if a model exists in the Ollama instance.
+    
+    Args:
+        model_name: Name of the model to check
+        
+    Returns:
+        True if model exists, False otherwise
+    """
+    discovery = get_discovery_instance()
+    return discovery.model_exists(model_name)
+
+def ensure_model_available(model_name: str, auto_pull: bool = True) -> bool:
+    """Ensure a model is available, pulling it if necessary.
+    
+    Args:
+        model_name: Name of the model to ensure
+        auto_pull: Whether to attempt pulling the model if not found
+        
+    Returns:
+        True if model is available after operation, False otherwise
+    """
+    discovery = get_discovery_instance()
+    return discovery.ensure_model_available(model_name, auto_pull=auto_pull)
+
+def get_available_models() -> List[str]:
+    """Get list of all available model names.
+    
+    Returns:
+        List of available model names
+    """
+    discovery = get_discovery_instance()
+    return [model["model_id"] for model in discovery.discover_models()]
 
 
 if __name__ == "__main__":

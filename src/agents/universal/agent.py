@@ -282,15 +282,20 @@ USER QUERY:
                     if name and name in coding_tools:
                         selected.append(t)
         
-        if desired and not selected:
-            stream_text("⚠️ No matching tools found for this agent configuration")
-            stream_text("📝 No tools configured - running in LLM-only mode")
-        elif selected:
+        # If no specific tools requested, use all available tools
+        if desired and not selected and available_tools:
+            self.logger.info(f"No specific tools matched, using all {len(available_tools)} available tools")
+            selected = available_tools
+            
+        if selected:
             tool_names = [getattr(t, 'name', str(t)) for t in selected]
-            stream_text(f"🔧 Loaded {len(selected)} tools: {tool_names}")
+            print(f"🔧 Loaded {len(selected)} tools: {tool_names}", flush=True)
             self.logger.info(f"Agent {self._model_id} loaded tools: {tool_names}")
         else:
-            stream_text("📝 No tools configured - running in LLM-only mode")
+            # Only show the warning if we explicitly tried to find tools but couldn't
+            if desired or available_tools:
+                print("⚠️ No matching tools found for this agent configuration", flush=True)
+            print("� No tools configured - running in LLM-only mode (tools functionality is limited)", flush=True)
             
         return selected
 
@@ -300,6 +305,13 @@ USER QUERY:
             return None
         
         try:
+            # Debug the tools to ensure they're properly structured
+            for i, tool in enumerate(self._tools):
+                tool_name = getattr(tool, "name", f"Tool #{i}")
+                tool_type = type(tool).__name__
+                has_get = hasattr(tool, "get")
+                self.logger.info(f"Tool {i}: {tool_name} ({tool_type}), has get method: {has_get}")
+            
             # Use optimized system message
             system_message = self.get_optimized_system_message()
             
@@ -309,14 +321,217 @@ USER QUERY:
                 ("placeholder", "{agent_scratchpad}")
             ])
             
-            agent = create_tool_calling_agent(self._llm, self._tools, prompt_template)
-            self._agent_executor = AgentExecutor(
-                agent=agent,
-                tools=self._tools,
-                verbose=False,
-                max_iterations=3,
-                handle_parsing_errors=True
-            )
+            # Create proper tool objects with dict-like interface
+            processed_tools = []
+            
+            # First make sure we have proper tools with .get() method
+            class ToolAdapter:
+                """Adapter to make any tool compatible with LangChain's expectations."""
+                def __init__(self, tool):
+                    self.tool = tool
+                    self.name = getattr(tool, "name", str(tool))
+                    self.description = getattr(tool, "description", "")
+                    self.args_schema = getattr(tool, "args_schema", None)
+                    self.return_direct = getattr(tool, "return_direct", False)
+                    self.coroutine = getattr(tool, "coroutine", None)
+                    self.__name__ = getattr(tool, "__name__", self.name)
+                    
+                    # Copy other attributes
+                    for attr in dir(tool):
+                        if not attr.startswith('_') and not hasattr(self, attr):
+                            setattr(self, attr, getattr(tool, attr))
+                            
+                def __call__(self, *args, **kwargs):
+                    return self.tool(*args, **kwargs)
+                    
+                def get(self, key, default=None):
+                    """Implement dict-like .get() method."""
+                    return getattr(self, key, default)
+                    
+                # Implement dictionary-like interface
+                def __getitem__(self, key):
+                    value = getattr(self, key, None)
+                    if value is None:
+                        raise KeyError(key)
+                    return value
+            
+            # Process each tool
+            for tool in self._tools:
+                # Skip malformed tools
+                if not hasattr(tool, "name") or not callable(tool):
+                    self.logger.warning(f"Skipping malformed tool: {tool}")
+                    continue
+                
+                # Wrap the tool to ensure it has .get method
+                wrapped_tool = ToolAdapter(tool)
+                processed_tools.append(wrapped_tool)
+                self.logger.info(f"Tool {tool.name} adapted with dict-like interface")
+            
+            if not processed_tools:
+                self.logger.error("No valid tools available after processing")
+                return None
+                
+            # Verify each tool has the required methods
+            for tool in processed_tools:
+                if not hasattr(tool, "get") or not callable(tool.get):
+                    self.logger.error(f"Tool {tool.name} missing get() method after adaptation")
+                    # Fix it on the fly
+                    setattr(tool, "get", lambda key, default=None: getattr(tool, key, default))
+            
+            # Convert list to a dict to ensure LangChain can use .get()
+            try:
+                # Create a more robust tool adapter
+                class EnhancedToolAdapter:
+                    """Enhanced adapter for tools to work with LangChain."""
+                    def __init__(self, tool):
+                        self._tool = tool
+                        self.name = getattr(tool, "name", str(tool))
+                        self.description = getattr(tool, "description", "")
+                        self.args_schema = getattr(tool, "args_schema", None)
+                        self.return_direct = getattr(tool, "return_direct", False)
+                        self.__name__ = self.name
+                        
+                        # Ensure tool has all required methods/attributes
+                        self._ensure_attributes()
+                        
+                    def _ensure_attributes(self):
+                        """Ensure the tool has all required attributes."""
+                        # Add any required attributes LangChain might expect
+                        required_attrs = [
+                            "name", "description", "args_schema", 
+                            "return_direct", "__name__"
+                        ]
+                        for attr in required_attrs:
+                            if not hasattr(self, attr):
+                                setattr(self, attr, None)
+                    
+                    def __call__(self, *args, **kwargs):
+                        """Execute the tool."""
+                        return self._tool(*args, **kwargs)
+                        
+                    def get(self, key, default=None):
+                        """Get an attribute with dict-like interface."""
+                        return getattr(self, key, default)
+                        
+                    def __getitem__(self, key):
+                        """Support dict-like access."""
+                        if hasattr(self, key):
+                            return getattr(self, key)
+                        raise KeyError(key)
+                        
+                    def __str__(self):
+                        """String representation."""
+                        return f"Tool({self.name})"
+                        
+                    def __repr__(self):
+                        """Detailed representation."""
+                        return f"Tool(name='{self.name}', description='{self.description}')"
+                
+                # Create enhanced tool adapters
+                enhanced_tools = []
+                for tool in processed_tools:
+                    try:
+                        enhanced_tool = EnhancedToolAdapter(tool)
+                        enhanced_tools.append(enhanced_tool)
+                        self.logger.info(f"Created enhanced adapter for tool {tool.name}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to create enhanced adapter for {tool.name}: {e}")
+                        # Fall back to the original tool
+                        enhanced_tools.append(tool)
+                
+                # Create a tool dictionary for any internal lookups
+                tool_dict = {tool.name: tool for tool in enhanced_tools}
+                
+                # Make the list itself have a .get method to handle LangChain's expectations
+                class ToolList(list):
+                    def get(self, key, default=None):
+                        if key in tool_dict:
+                            return tool_dict[key]
+                        return default
+                
+                # Create a list with .get method
+                final_tools = ToolList(enhanced_tools)
+                
+                # Create the agent with our enhanced tools
+                agent = create_tool_calling_agent(self._llm, final_tools, prompt_template)
+                self._agent_executor = AgentExecutor(
+                    agent=agent,
+                    tools=final_tools,
+                    verbose=False,
+                    max_iterations=3,
+                    handle_parsing_errors=True
+                )
+            except Exception as e:
+                error_str = str(e)
+                if "'list' object has no attribute 'get'" in error_str:
+                    self.logger.error("Tool format error: A list is being treated as a dictionary, fixing tool structure")
+                    # Create a more detailed log of the tool structure
+                    for i, tool in enumerate(processed_tools):
+                        self.logger.info(f"Tool {i} details: {dir(tool)}")
+                    
+                    # Last-resort fix: monkey patch the list class just for this instance
+                    def get_method(self, key, default=None):
+                        for item in self:
+                            if hasattr(item, 'name') and item.name == key:
+                                return item
+                        return default
+                    
+                    # Try again with our emergency fix
+                    self.logger.info("Attempting emergency fix for tool list")
+                    final_tools = processed_tools.copy()
+                    final_tools.get = get_method.__get__(final_tools)
+                    
+                    # Last attempt with emergency fix
+                    agent = create_tool_calling_agent(self._llm, final_tools, prompt_template)
+                    self._agent_executor = AgentExecutor(
+                        agent=agent,
+                        tools=final_tools,
+                        verbose=False,
+                        max_iterations=3,
+                        handle_parsing_errors=True
+                    )
+                elif "'ToolAdapter' object has no attribute" in error_str or "is not a module, class, method, or function" in error_str:
+                    self.logger.error(f"Tool adaptation issue: {error_str}")
+                    
+                    # If we're having trouble with tool adaptation, try a completely different approach:
+                    # Use the raw StructuredTool objects directly
+                    
+                    # Get the original tools from the tool registry
+                    from src.tools.registry import get_registered_tools
+                    registry_tools = get_registered_tools()
+                    
+                    # Filter to match the names we want
+                    desired_names = [t.name for t in self._tools]
+                    raw_tools = [t for t in registry_tools if hasattr(t, 'name') and t.name in desired_names]
+                    
+                    if raw_tools:
+                        self.logger.info(f"Using {len(raw_tools)} raw tools from registry")
+                        
+                        # Create agent with unmodified tools
+                        try:
+                            agent = create_tool_calling_agent(self._llm, raw_tools, prompt_template)
+                            self._agent_executor = AgentExecutor(
+                                agent=agent, 
+                                tools=raw_tools,
+                                verbose=False,
+                                max_iterations=3,
+                                handle_parsing_errors=True
+                            )
+                            self.logger.info("Created agent executor with raw tools")
+                        except Exception as inner_e:
+                            self.logger.error(f"Failed with raw tools too: {inner_e}")
+                            # Even raw tools failed, operate in LLM-only mode
+                            self._agent_executor = None
+                    else:
+                        self.logger.error("Could not find matching tools in registry")
+                        self._agent_executor = None
+                        print("🛑 Failed to initialize tools - running in LLM-only mode", flush=True)
+                else:
+                    self.logger.error(f"Unexpected error building agent executor: {e}")
+                    # Don't raise - we'll operate in LLM-only mode
+                    self._agent_executor = None
+                    print("🛑 Failed to initialize tools - running in LLM-only mode", flush=True)
+                    # Return None without raising an exception
             
             if hasattr(self, 'capabilities') and self.capabilities.get('verbose'):
                 stream_text(f"✅ {self._agent_type.title()} agent executor created with {len(self._tools)} tools")
@@ -337,7 +552,26 @@ USER QUERY:
     def run(self, prompt: str) -> str:
         if not self._loaded:
             self.load()
-        
+            
+        # If tools failed to load but we have LLM, let user know tools are not available
+        if not self._agent_executor and self._llm and self._tools:
+            # Log the issue
+            self.logger.warning("Agent executor not available despite tools being configured")
+            
+            # Notify user about the fallback mode
+            tool_names = [getattr(t, 'name', str(t)) for t in self._tools]
+            message = (
+                f"\n🛑 IMPORTANT: Tools could not be properly initialized. "
+                f"Running in LLM-only mode instead of using {len(self._tools)} tools ({', '.join(tool_names)}).\n\n"
+                f"If you want to use a tool, you can still try entering commands like:\n"
+                f"- write_file path=\"D:\\containers\\ollama\\hello.txt\" content=\"Hello, Ollama!\"\n"
+                f"- read_file path=\"D:\\containers\\ollama\\hello.txt\"\n"
+                f"- list_files path=\"D:\\containers\\ollama\"\n\n"
+            )
+            
+            # Include this notice in the prompt so the LLM knows tools aren't available
+            prompt = message + prompt
+            
         # If we have a proper agent executor, use it
         if self._agent_executor:
             try:

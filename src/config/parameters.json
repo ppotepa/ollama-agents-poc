@@ -42,6 +42,11 @@
       "help": "Initial query for the agent (skips to chat)",
       "dest": "query"
     },
+    "--no-tools": {
+      "action": "store_true",
+      "help": "Disable all tools (run in LLM-only mode)",
+      "dest": "no_tools"
+    },
     "-g": {
       "type": "str",
       "help": "Git repository URL (required for coding agents)",

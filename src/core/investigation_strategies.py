@@ -262,7 +262,7 @@ class DepthFirstStrategy(BaseInvestigationStrategy):
             strategy=self.strategy_type,
             priority=InvestigationPriority.HIGH,
             estimated_duration=self._estimate_duration("code_analysis", "complex"),
-            required_models=["codestral:latest"],
+            required_models=["qwen2.5-coder:7b", "phi3:small", "llama3:8b"],  # Use models with verified tool support
             dependencies=[steps[0].step_id],
             expected_outputs=["dependency_graph", "code_structure_analysis"],
             validation_criteria=["All dependencies identified", "Structure is clear"]
@@ -337,7 +337,7 @@ class DepthFirstStrategy(BaseInvestigationStrategy):
             strategy=self.strategy_type,
             priority=InvestigationPriority.HIGH,
             estimated_duration=self._estimate_duration("implementation", "complex"),
-            required_models=["codestral:latest"],
+            required_models=["qwen2.5-coder:7b", "phi3:small"],  # Models with verified tool support
             dependencies=[steps[0].step_id],
             expected_outputs=["architecture_design", "component_specification"],
             validation_criteria=["Architecture is sound", "Components well-defined"]
@@ -368,7 +368,7 @@ class DepthFirstStrategy(BaseInvestigationStrategy):
             strategy=self.strategy_type,
             priority=InvestigationPriority.HIGH,
             estimated_duration=self._estimate_duration("code_analysis", "complex"),
-            required_models=["codestral:latest"],
+            required_models=["qwen2.5-coder:7b", "phi3:small"],  # Models with verified tool support
             dependencies=[steps[0].step_id],
             expected_outputs=["error_flow_analysis", "root_cause_identification"],
             validation_criteria=["Error flow understood", "Root causes found"]
@@ -409,7 +409,7 @@ class DepthFirstStrategy(BaseInvestigationStrategy):
                     strategy=self.strategy_type,
                     priority=InvestigationPriority.HIGH,
                     estimated_duration=self._estimate_duration("code_analysis", "complex"),
-                    required_models=["codestral:latest"],
+                    required_models=["qwen2.5-coder:7b", "phi3:small"],  # Models with verified tool support
                     dependencies=[result.get("step_id")],
                     expected_outputs=["enhanced_understanding"],
                     validation_criteria=["Deeper insight achieved"]
@@ -531,15 +531,16 @@ class BreadthFirstStrategy(BaseInvestigationStrategy):
     
     def _get_optimal_model_for_area(self, area: str) -> List[str]:
         """Get optimal model for investigating a specific area."""
+        # Use models we know support tools for code-related tasks
         model_mapping = {
             "file_system": ["qwen2.5:7b-instruct-q4_K_M"],
-            "code_structure": ["codestral:latest"],
-            "dependencies": ["deepseek-coder:6.7b-instruct-q4_K_M"],
-            "requirements": ["llama3.2:latest"],
-            "architecture": ["codestral:latest"],
-            "testing": ["deepseek-coder:6.7b-instruct-q4_K_M"],
-            "error_analysis": ["codestral:latest"],
-            "performance_analysis": ["deepseek-coder:6.7b-instruct-q4_K_M"]
+            "code_structure": ["qwen2.5-coder:7b", "phi3:small", "llama3:8b"],
+            "dependencies": ["qwen2.5-coder:7b", "phi3:small"],
+            "requirements": ["qwen2.5:7b-instruct-q4_K_M"],
+            "architecture": ["qwen2.5-coder:7b", "phi3:small", "llama3:8b"],
+            "testing": ["qwen2.5-coder:7b", "phi3:small"],
+            "error_analysis": ["qwen2.5-coder:7b", "phi3:small"],
+            "performance_analysis": ["qwen2.5-coder:7b", "phi3:small"]
         }
         
         return model_mapping.get(area, ["qwen2.5:7b-instruct-q4_K_M"])
@@ -671,7 +672,7 @@ class TargetedStrategy(BaseInvestigationStrategy):
                 strategy=self.strategy_type,
                 priority=InvestigationPriority.HIGH,
                 estimated_duration=self._estimate_duration("code_analysis"),
-                required_models=["codestral:latest"],
+                required_models=["qwen2.5-coder:7b", "phi3:small"],  # Models with verified tool support
                 expected_outputs=[f"file_analysis_{target}"],
                 validation_criteria=[f"File {target} thoroughly analyzed"]
             ))
@@ -706,14 +707,15 @@ class TargetedStrategy(BaseInvestigationStrategy):
     
     def _get_model_for_task(self, task: str) -> List[str]:
         """Get optimal model for a specific task."""
+        # Use models we know support tools for code-related tasks
         task_models = {
-            "implementation": ["codestral:latest"],
-            "bug_fix": ["deepseek-coder:6.7b-instruct-q4_K_M"],
-            "optimization": ["deepseek-coder:6.7b-instruct-q4_K_M"],
-            "testing": ["codestral:latest"],
-            "documentation": ["gemma:7b-instruct-q4_K_M"],
+            "implementation": ["qwen2.5-coder:7b", "phi3:small", "llama3:8b"],
+            "bug_fix": ["qwen2.5-coder:7b", "phi3:small"],
+            "optimization": ["qwen2.5-coder:7b", "phi3:small"],
+            "testing": ["qwen2.5-coder:7b", "phi3:small"],
+            "documentation": ["qwen2.5:7b-instruct-q4_K_M"],
             "analysis": ["qwen2.5:7b-instruct-q4_K_M"],
-            "debugging": ["codestral:latest"]
+            "debugging": ["qwen2.5-coder:7b", "phi3:small", "llama3:8b"]
         }
         
         return task_models.get(task, ["qwen2.5:7b-instruct-q4_K_M"])
@@ -732,7 +734,7 @@ class TargetedStrategy(BaseInvestigationStrategy):
                     strategy=self.strategy_type,
                     priority=InvestigationPriority.HIGH,
                     estimated_duration=self._estimate_duration("research"),
-                    required_models=["codestral:latest"],
+                    required_models=["qwen2.5-coder:7b", "phi3:small"],  # Models with verified tool support
                     dependencies=[result.get("step_id")],
                     expected_outputs=["follow_up_results"],
                     validation_criteria=["Target achieved"]

@@ -17,6 +17,7 @@ from src.core.investigation_strategies import InvestigationStrategyManager, Inve
 from src.core.model_capability_checker import get_capability_checker
 from src.core.helpers import get_agent_instance
 from src.agents.universal.agent import UniversalAgent
+from src.core.model_discovery import model_exists, ensure_model_available, get_available_models
 
 
 class OrchestrationState(Enum):
@@ -365,14 +366,24 @@ class IntelligentOrchestrator:
             if inv_step.required_models:
                 # Validate that preferred models support tools if needed
                 suitable_models = []
+                from src.core.model_tool_support import test_model_tool_support
+                
                 for model in inv_step.required_models:
-                    if not requires_tools or capability_checker.supports_tools(model):
-                        suitable_models.append(model)
+                    if requires_tools:
+                        # Explicitly test if the model supports tools
+                        if test_model_tool_support(model):
+                            self.logger.info(f"Verified tool support for model {model}")
+                            suitable_models.append(model)
+                        else:
+                            self.logger.warning(f"Model {model} doesn't support tools for step {inv_step.step_id}, finding alternative")
+                            # Get an alternative that we know supports tools
+                            alternative = capability_checker.get_best_model_for_task("coding", requires_tools=True)
+                            if alternative:
+                                self.logger.info(f"Using alternative model with verified tool support: {alternative}")
+                                suitable_models.append(alternative)
                     else:
-                        self.logger.warning(f"Model {model} doesn't support tools for step {inv_step.step_id}, finding alternative")
-                        alternative = capability_checker.get_alternative_model(model, requires_tools=True)
-                        if alternative:
-                            suitable_models.append(alternative)
+                        # Tools not required, can use as is
+                        suitable_models.append(model)
                 
                 assigned_model = suitable_models[0] if suitable_models else default_model
             else:
@@ -383,7 +394,27 @@ class IntelligentOrchestrator:
                 elif "code" in inv_step.description.lower() or "analyze" in inv_step.description.lower():
                     task_type = "coding"
                 
-                assigned_model = capability_checker.get_best_model_for_task(task_type, requires_tools) or default_model
+                # Use the capability checker to get a model with verified tool support
+                from src.core.model_tool_support import test_model_tool_support
+                
+                # Get the best model for this task type with verified tool support if needed
+                assigned_model = capability_checker.get_best_model_for_task(task_type, requires_tools)
+                
+                # Double-check tool support if required
+                if requires_tools and assigned_model and not test_model_tool_support(assigned_model):
+                    self.logger.warning(f"Selected model {assigned_model} failed tool support verification, using default")
+                    # Try our hardcoded reliable models
+                    for reliable_model in ["qwen2.5-coder:7b", "phi3:small", "llama3:8b"]:
+                        if test_model_tool_support(reliable_model):
+                            assigned_model = reliable_model
+                            self.logger.info(f"Using reliable model with verified tool support: {assigned_model}")
+                            break
+                    else:
+                        assigned_model = default_model
+                
+                # Fallback to default model if needed
+                if not assigned_model:
+                    assigned_model = default_model
             
             exec_step = ExecutionStep(
                 id=inv_step.step_id,
@@ -537,19 +568,70 @@ class IntelligentOrchestrator:
         Returns:
             Universal agent instance
         """
-        if model_name not in self.agent_cache:
-            self.logger.debug(f"Creating new agent for model {model_name}")
+        # Check if we already have this agent cached
+        if model_name in self.agent_cache:
+            return self.agent_cache[model_name]
             
-            # Create agent with streaming configuration
-            agent = await asyncio.to_thread(
-                get_agent_instance,
-                model_name,
-                streaming=self.enable_streaming
-            )
-            
-            self.agent_cache[model_name] = agent
+        self.logger.debug(f"Creating new agent for model {model_name}")
         
-        return self.agent_cache[model_name]
+        # Check if the model exists and try to auto-pull if it doesn't
+        model_available = model_exists(model_name)
+        
+        if not model_available:
+            self.logger.info(f"Model {model_name} not found locally, attempting to pull...")
+            try:
+                # Try to pull the model
+                model_available = ensure_model_available(model_name)
+                if model_available:
+                    self.logger.info(f"Successfully pulled model {model_name}")
+                else:
+                    self.logger.warning(f"Failed to pull model {model_name}, will try fallback models")
+                    # Get a fallback model that exists
+                    capability_checker = get_capability_checker()
+                    fallback_model = capability_checker.get_default_model()
+                    
+                    # Make sure the fallback model exists
+                    if not model_exists(fallback_model):
+                        # As a last resort, get the first available model
+                        from src.core.model_discovery import get_available_models
+                        available_models = get_available_models()
+                        if available_models:
+                            fallback_model = available_models[0]
+                        else:
+                            self.logger.error("No models are available in the system")
+                            raise RuntimeError("No models are available in the system")
+                    
+                    self.logger.info(f"Using fallback model {fallback_model} instead of {model_name}")
+                    model_name = fallback_model
+            except Exception as e:
+                self.logger.error(f"Error pulling model {model_name}: {str(e)}")
+                # Get a fallback model that exists
+                capability_checker = get_capability_checker()
+                fallback_model = capability_checker.get_default_model()
+                
+                # Make sure the fallback model exists
+                if not model_exists(fallback_model):
+                    # As a last resort, get the first available model
+                    from src.core.model_discovery import get_available_models
+                    available_models = get_available_models()
+                    if available_models:
+                        fallback_model = available_models[0]
+                    else:
+                        self.logger.error("No models are available in the system")
+                        raise RuntimeError("No models are available in the system")
+                
+                self.logger.info(f"Using fallback model {fallback_model} instead of {model_name}")
+                model_name = fallback_model
+                
+        # Create agent with streaming configuration
+        agent = await asyncio.to_thread(
+            get_agent_instance,
+            model_name,
+            streaming=self.enable_streaming
+        )
+        
+        self.agent_cache[model_name] = agent
+        return agent
     
     def _prepare_step_context(self, session: OrchestrationSession, 
                             step: ExecutionStep) -> Dict[str, Any]:
@@ -600,9 +682,15 @@ class IntelligentOrchestrator:
         
         # Execute with streaming
         result = ""
-        async for chunk in agent.stream(prompt):
-            result += chunk
+        
+        # Define on_token callback
+        def on_token(token: str):
+            nonlocal result
+            result += token
             # Could add real-time processing here
+        
+        # Call stream with the on_token callback
+        await asyncio.to_thread(agent.stream, prompt, on_token)
         
         return result
     
@@ -722,17 +810,44 @@ class IntelligentOrchestrator:
         capability_checker = get_capability_checker()
         
         # Check if new model supports tools if current step requires them
-        if self._step_requires_tools(step):
-            if not capability_checker.supports_tools(new_model):
+        requires_tools = self._step_requires_tools(step)
+        
+        if requires_tools:
+            # Use our direct tool support test to verify the model
+            from src.core.model_tool_support import test_model_tool_support, get_verified_tool_supporting_models
+            
+            # Check if we have cached verification results for this model
+            if not test_model_tool_support(new_model):
                 self.logger.warning(f"Recommended model {new_model} doesn't support tools, finding alternative")
-                # Get a tool-supporting alternative
-                alternative = capability_checker.get_alternative_model(new_model, requires_tools=True)
-                if alternative:
-                    new_model = alternative
-                    self.logger.info(f"Using tool-supporting alternative: {new_model}")
+                
+                # Get cached list of verified tool-supporting models
+                verified_models = get_verified_tool_supporting_models()
+                
+                # Try these verified models first if available
+                if verified_models:
+                    for verified_model in verified_models:
+                        if verified_model != new_model:  # Don't try the same model we just tested
+                            self.logger.info(f"Trying verified tool-supporting model: {verified_model}")
+                            new_model = verified_model
+                            break
                 else:
-                    self.logger.warning(f"No tool-supporting alternative found for {new_model}, skipping swap")
-                    return
+                    # Fallback to reliable models we've hardcoded
+                    for reliable_model in ["qwen2.5-coder:7b", "phi3:small", "llama3:8b", "qwen2.5:7b-instruct-q4_K_M"]:
+                        if test_model_tool_support(reliable_model):
+                            new_model = reliable_model
+                            self.logger.info(f"Using reliable model with verified tool support: {new_model}")
+                            break
+                    else:
+                        # If no reliable models work, try the capability checker as fallback
+                        alternative = capability_checker.get_alternative_model(new_model, requires_tools=True)
+                        if alternative and alternative != new_model and test_model_tool_support(alternative):
+                            new_model = alternative
+                            self.logger.info(f"Using capability checker recommended model: {new_model}")
+                        else:
+                            self.logger.warning(f"Could not find a suitable tool-supporting model, using qwen2.5-coder:7b as last resort")
+                            new_model = "qwen2.5-coder:7b"
+                            
+                self.logger.info(f"Using tool-supporting alternative: {new_model}")
         
         self.logger.info(f"Model swap recommended: {old_model} -> {new_model} "
                         f"(Reason: {reflection_result.reasoning})")
@@ -978,26 +1093,55 @@ class IntelligentOrchestrator:
         # Check if the subtask has tool-requiring capabilities
         tool_requiring_capabilities = [
             "file_operations", "system_operations", "code_execution", 
-            "web_operations", "project_operations"
+            "web_operations", "project_operations", "repository", "tool_usage",
+            "data_analysis", "automation"
         ]
         
+        # Check for explicit tool requirement flag if it exists
+        if hasattr(step, 'requires_tools') and step.requires_tools:
+            return True
+            
         # Check subtask if available
         if hasattr(step, 'subtask') and step.subtask:
+            # Check explicit flag in subtask if it exists
+            if hasattr(step.subtask, 'requires_tools') and step.subtask.requires_tools:
+                return True
+                
+            # Check required capabilities
             for capability in step.subtask.required_capabilities:
                 if any(tool_cap in capability.lower() for tool_cap in tool_requiring_capabilities):
                     return True
             
-            # Check task type
-            if step.subtask.task_type in ['CODING', 'SYSTEM_OPERATION']:
+            # Check task type - these types always need tools
+            if step.subtask.task_type in ['CODING', 'SYSTEM_OPERATION', 'REPOSITORY_MANAGEMENT', 'DATA_PROCESSING']:
+                return True
+                
+            # Check if the subtask has tools defined or required
+            if hasattr(step.subtask, 'available_tools') and step.subtask.available_tools:
                 return True
         
         # Check step description for tool-indicating keywords
         if hasattr(step, 'description') and step.description:
-            tool_keywords = ["file", "code", "execute", "run", "install", "create", "modify", "analyze"]
+            # Expanded list of tool-related keywords
+            tool_keywords = [
+                "file", "code", "execute", "run", "install", "create", "modify", "analyze",
+                "directory", "folder", "repository", "git", "clone", "commit", "tool", "command",
+                "terminal", "script", "compile", "build", "deploy", "api", "database", "query",
+                "search", "fetch", "download", "upload", "write"
+            ]
             step_text = step.description.lower()
             if any(keyword in step_text for keyword in tool_keywords):
                 return True
-        
+                
+        # Check if step properties indicate tool requirements
+        if hasattr(step, 'properties') and step.properties:
+            if step.properties.get('tools_required', False):
+                return True
+            if step.properties.get('file_operations', False):
+                return True
+            if step.properties.get('system_access', False):
+                return True
+                
         return False
     
     def cleanup_completed_sessions(self, max_age_hours: int = 24) -> int:

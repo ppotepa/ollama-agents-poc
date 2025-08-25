@@ -733,7 +733,9 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
                 ["git", "pull", "origin", "main"],
                 cwd=str(target_dir),
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8',
+                errors='replace'
             )
             if result.returncode != 0:
                 # Try pulling from master branch if main fails
@@ -741,7 +743,9 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
                     ["git", "pull", "origin", "master"],
                     cwd=str(target_dir),
                     capture_output=True,
-                    text=True
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
                 )
             
             # Load repository context into memory if pull was successful
@@ -766,7 +770,9 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
         result = subprocess.run(
             ["git", "clone", git_url, str(target_dir)],
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='replace'
         )
         
         if result.returncode == 0:
@@ -803,7 +809,9 @@ def is_git_repository(path: str = ".") -> bool:
             ["git", "rev-parse", "--git-dir"],
             cwd=path,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='replace'
         )
         return result.returncode == 0
     except Exception:
@@ -913,7 +921,9 @@ def get_repository_info(path: str = ".") -> Optional[dict]:
             ["git", "config", "--get", "remote.origin.url"],
             cwd=path,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='replace'
         )
         remote_url = result.stdout.strip() if result.returncode == 0 else None
         
@@ -922,7 +932,9 @@ def get_repository_info(path: str = ".") -> Optional[dict]:
             ["git", "branch", "--show-current"],
             cwd=path,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='replace'
         )
         current_branch = result.stdout.strip() if result.returncode == 0 else None
         
@@ -931,7 +943,9 @@ def get_repository_info(path: str = ".") -> Optional[dict]:
             ["git", "rev-list", "--count", "HEAD"],
             cwd=path,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='replace'
         )
         commit_count = int(result.stdout.strip()) if result.returncode == 0 else 0
         
@@ -1048,8 +1062,15 @@ def is_git_url(url: str) -> bool:
     return any(pattern in url_lower for pattern in git_patterns)
 
 
-def get_agent_instance(agent_name: str, streaming: bool = True):
-    """Get the appropriate agent instance based on the agent name."""
+def get_agent_instance(agent_name: str, streaming: bool = True, with_tools: bool = True):
+    """
+    Get the appropriate agent instance based on the agent name.
+    
+    Args:
+        agent_name: The name of the agent to create
+        streaming: Whether to enable streaming responses
+        with_tools: Whether to enable tools for the agent
+    """
     try:
         # Use the new DynamicAgentFactory for creating agents
         from src.core.agent_factory import get_agent_factory
@@ -1059,6 +1080,12 @@ def get_agent_instance(agent_name: str, streaming: bool = True):
         
         if agent:
             print(f"✅ Created agent using DynamicAgentFactory: {agent_name} (streaming: {streaming})")
+            
+            # If tools are explicitly disabled, update the agent
+            if not with_tools and hasattr(agent, '_tools'):
+                agent._tools = []
+                print(f"🛑 Tools explicitly disabled for {agent_name}")
+            
             return agent
         
         # Fallback to legacy system if DynamicAgentFactory fails
