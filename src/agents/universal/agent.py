@@ -184,12 +184,18 @@ RESPONSE APPROACH:
                 stream_text(f"❌ Non-streaming error: {e}")
                 return ""
         
-        # Use streaming mode
+        # Use streaming mode with deduplication
         final_tokens: List[str] = []
+        seen_tokens = set()
         try:
             for chunk in self._llm.stream(prompt):  # type: ignore[attr-defined]
-                text = getattr(chunk, "content", None) or str(chunk)
-                if text:
+                # Extract content from LangChain AIMessageChunk
+                text = ""
+                if hasattr(chunk, "content") and chunk.content:
+                    text = str(chunk.content)  # Use content property, not text method
+                
+                if text and text.strip() and text not in seen_tokens:
+                    seen_tokens.add(text)
                     on_token(text)
                     final_tokens.append(text)
         except Exception as e:

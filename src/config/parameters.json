@@ -115,6 +115,11 @@
       "default": 5,
       "help": "Maximum number of collaborative iterations (default: 5)",
       "dest": "max_iterations"
+    },
+    "intelligent": {
+      "action": "store_true",
+      "help": "Enable intelligent investigation mode with dynamic model switching",
+      "dest": "intelligent_investigation"
     }
   },
   "subcommands": {

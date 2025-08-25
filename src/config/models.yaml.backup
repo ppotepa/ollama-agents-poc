@@ -107,24 +107,6 @@ models:
     - code_analysis
     - development
     - debugging
-  deepseek-coder:6.7b-instruct-q4_K_M:
-    auto_discovered: true
-    capabilities:
-    - coding
-    - analysis
-    - file_operations
-    description: Auto-discovered coding model
-    size_b: 1.9
-    strengths:
-    - Code generation
-    - Code analysis
-    - Technical documentation
-    supports_tools: false
-    type: coding
-    use_cases:
-    - code_analysis
-    - development
-    - debugging
   gemma:7b-instruct-q4_K_M:
     auto_discovered: true
     capabilities:

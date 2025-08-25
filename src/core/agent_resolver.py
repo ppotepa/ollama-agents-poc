@@ -180,19 +180,19 @@ class AgentResolver:
                 total_score += intent_score * model_preference_score
         
         # Capability-based scoring
-        if capabilities.get('coding', False):
+        if 'coding' in capabilities:
             coding_score = intent_scores.get('coding', 0) + intent_scores.get('file_ops', 0)
             if coding_score > 0:
                 total_score += coding_score * 0.5
                 reasoning.append("Has coding capabilities")
         
-        if capabilities.get('file_operations', False):
+        if 'file_operations' in capabilities:
             file_ops_score = intent_scores.get('file_ops', 0)
             if file_ops_score > 0:
                 total_score += file_ops_score * 0.3
                 reasoning.append("Has file operations capabilities")
         
-        if capabilities.get('general_qa', False):
+        if 'general_qa' in capabilities or 'analysis' in capabilities:
             qa_score = intent_scores.get('qa', 0) + intent_scores.get('analysis', 0)
             if qa_score > 0:
                 total_score += qa_score * 0.2

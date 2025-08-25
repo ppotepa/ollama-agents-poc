@@ -1,0 +1,397 @@
+{
+  "timestamp": 1756134728.8331392,
+  "models": [
+    {
+      "model_id": "phi3:mini",
+      "size_b": 1.0,
+      "type": "general",
+      "capabilities": [
+        "general_qa"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered general model",
+      "strengths": [
+        "General purpose",
+        "Analysis",
+        "Q&A"
+      ],
+      "use_cases": [
+        "qa",
+        "analysis",
+        "general"
+      ]
+    },
+    {
+      "model_id": "deepseek-coder:6.7b-instruct-q4_K_M",
+      "size_b": 1.9,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": false,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "deepcoder:14b",
+      "size_b": 4.2,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": false,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "llama3.3:70b-instruct-q3_K_M",
+      "size_b": 16.0,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "llama3.3:70b-instruct-q2_K",
+      "size_b": 12.3,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "qwen2.5:3b-instruct-q4_K_M",
+      "size_b": 0.9,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "gemma:7b-instruct-q4_K_M",
+      "size_b": 2.6,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "qwen2.5:7b-instruct-q4_K_M",
+      "size_b": 2.2,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "codellama:13b-instruct",
+      "size_b": 3.4,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "mistral:7b-instruct-q4_K_M",
+      "size_b": 2.0,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "deepseek-coder:6.7b",
+      "size_b": 1.8,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": false,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "deepseek-coder-v2:16b-lite-instruct-q4_K_M",
+      "size_b": 4.8,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": false,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "qwen2.5-coder:7b",
+      "size_b": 2.2,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "mistral:7b-instruct",
+      "size_b": 2.0,
+      "type": "instruct",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered instruct model",
+      "strengths": [
+        "Instruction following",
+        "Analysis",
+        "Problem solving"
+      ],
+      "use_cases": [
+        "analysis",
+        "qa",
+        "reasoning"
+      ]
+    },
+    {
+      "model_id": "codellama:13b-instruct-q4_K_M",
+      "size_b": 3.7,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    },
+    {
+      "model_id": "tinyllama:latest",
+      "size_b": 0.3,
+      "type": "general",
+      "capabilities": [
+        "general_qa",
+        "analysis",
+        "reasoning"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered general model",
+      "strengths": [
+        "General purpose",
+        "Analysis",
+        "Q&A"
+      ],
+      "use_cases": [
+        "qa",
+        "analysis",
+        "general"
+      ]
+    },
+    {
+      "model_id": "mistral:latest",
+      "size_b": 2.0,
+      "type": "general",
+      "capabilities": [
+        "general_qa"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered general model",
+      "strengths": [
+        "General purpose",
+        "Analysis",
+        "Q&A"
+      ],
+      "use_cases": [
+        "qa",
+        "analysis",
+        "general"
+      ]
+    },
+    {
+      "model_id": "codellama:13b-instruct-q4_0",
+      "size_b": 3.4,
+      "type": "coding",
+      "capabilities": [
+        "coding",
+        "analysis",
+        "file_operations"
+      ],
+      "supports_tools": true,
+      "description": "Auto-discovered coding model",
+      "strengths": [
+        "Code generation",
+        "Code analysis",
+        "Technical documentation"
+      ],
+      "use_cases": [
+        "code_analysis",
+        "development",
+        "debugging"
+      ]
+    }
+  ]
+}

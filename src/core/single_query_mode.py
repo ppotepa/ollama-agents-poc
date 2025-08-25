@@ -2,8 +2,94 @@
 
 import os
 import sys
+import asyncio
 from typing import Optional, Dict, Any
 from pathlib import Path
+
+
+def run_intelligent_investigation(query: str, streaming: bool = True) -> str:
+    """Run a query using the intelligent orchestrator for complex investigations."""
+    try:
+        from src.core.intelligent_orchestrator import get_orchestrator, ExecutionMode
+        
+        print(f"🧠 Starting intelligent investigation")
+        print(f"🔍 Query: {query[:100]}...")
+        print(f"🎬 Streaming: {streaming}")
+        print("=" * 60)
+        
+        # Get the orchestrator instance
+        orchestrator = get_orchestrator(enable_streaming=streaming)
+        
+        # Run the investigation asynchronously
+        async def run_investigation():
+            session_id = await orchestrator.start_investigation(
+                query=query,
+                execution_mode=ExecutionMode.ADAPTIVE,
+                context={"working_directory": os.getcwd()}
+            )
+            
+            # Wait for completion and get results
+            max_wait_time = 600  # 10 minutes
+            wait_interval = 5  # 5 seconds
+            elapsed_time = 0
+            
+            while elapsed_time < max_wait_time:
+                status = orchestrator.get_session_status(session_id)
+                if status:
+                    state = status["session"]["current_state"]
+                    if state == "completed":
+                        print(f"✅ Investigation completed successfully")
+                        
+                        # Get final results from context
+                        context = orchestrator.context_manager.get_context(session_id)
+                        if context:
+                            # Compile final result from execution history
+                            final_results = []
+                            for record in context.execution_history:
+                                if record.get("result") and "ERROR" not in record.get("result", ""):
+                                    final_results.append(record["result"])
+                            
+                            if final_results:
+                                return "\n\n".join(final_results[-3:])  # Last 3 successful results
+                            else:
+                                return "Investigation completed but no results found."
+                        else:
+                            return "Investigation completed successfully."
+                    
+                    elif state == "error":
+                        print(f"❌ Investigation failed")
+                        return "Investigation failed due to an error."
+                    
+                    else:
+                        # Print progress
+                        progress = status.get("progress", {})
+                        completed = progress.get("completed_steps", 0)
+                        total = progress.get("total_steps", 0)
+                        if total > 0:
+                            percentage = progress.get("completion_percentage", 0)
+                            print(f"🔄 Progress: {completed}/{total} steps ({percentage:.1f}%)")
+                
+                await asyncio.sleep(wait_interval)
+                elapsed_time += wait_interval
+            
+            # Timeout reached
+            print(f"⏱️  Investigation timed out after {max_wait_time} seconds")
+            await orchestrator.pause_session(session_id)
+            return "Investigation timed out. Please try a more specific query."
+        
+        # Run the async investigation
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        
+        return asyncio.run(run_investigation())
+        
+    except Exception as e:
+        print(f"❌ Error in intelligent investigation: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to collaborative mode
+        print(f"🔄 Falling back to collaborative mode")
+        return run_collaborative_query(query, "universal", 5, streaming)
 
 
 def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5, streaming: bool = True) -> str:
@@ -49,16 +135,22 @@ def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5
         return run_single_query(query, agent_name, collaborative=False, force_streaming=streaming)
 
 
-def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False, collaborative: bool = False, max_iterations: int = 5) -> str:
+def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False, collaborative: bool = False, max_iterations: int = 5, intelligent_investigation: bool = False) -> str:
     """Run a single query with cognitive command interpretation and connection mode support.
     
     Args:
         collaborative: If True, use iterative collaboration between main agent and interceptor
         max_iterations: Maximum number of collaborative iterations (only used if collaborative=True)
+        intelligent_investigation: If True, use intelligent orchestrator for complex investigation
     """
     connection = None
     try:
         print(f"🔍 Debug: Starting run_single_query for agent '{agent_name}' with {connection_mode} mode")
+        
+        # **INTELLIGENT INVESTIGATION MODE**: Use the intelligent orchestrator for complex investigations
+        if intelligent_investigation:
+            print(f"🧠 Enabling intelligent investigation mode")
+            return run_intelligent_investigation(query, force_streaming)
         
         # **COLLABORATIVE MODE**: Use iterative back-and-forth between agents
         if collaborative:
@@ -265,18 +357,23 @@ def run_single_query_direct_ollama(query: str, agent_name: str, interceptor_data
         
         # Check if this is a sophisticated agent with streaming
         if hasattr(agent, 'stream') and callable(getattr(agent, 'stream')):
-            # For single query mode, we'll show streaming tokens and collect the response
+            # For single query mode, we'll collect the response but avoid double printing
             result_parts = []
-            def collect_and_display_token(token):
-                print(token, end='', flush=True)  # Show streaming tokens in real-time
+            printed_parts = set()
+            
+            def collect_token_safely(token):
+                """Collect token and print only if not already printed."""
+                if token not in printed_parts:
+                    print(token, end='', flush=True)  # Show streaming tokens in real-time
+                    printed_parts.add(token)
                 result_parts.append(token)
             
             print(f"🎬 Streaming response:")
             # Pass interceptor context to streaming agent if supported
             if interceptor_data and hasattr(agent, 'stream_with_context'):
-                agent.stream_with_context(query, collect_and_display_token, agent_context)
+                agent.stream_with_context(query, collect_token_safely, agent_context)
             else:
-                agent.stream(query, collect_and_display_token)
+                agent.stream(query, collect_token_safely)
             result = ''.join(result_parts)
             print(f"\n")  # Add newline after streaming
         else:

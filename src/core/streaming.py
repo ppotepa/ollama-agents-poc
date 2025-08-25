@@ -1,7 +1,8 @@
 """Streaming support utilities (callbacks, real-time capture)."""
 from __future__ import annotations
 
-from typing import List
+import threading
+from typing import List, Set
 from src.utils.animations import stream_text
 
 
@@ -9,17 +10,26 @@ class StreamingCallbackHandler:
     def __init__(self):
         self.tokens: List[str] = []
         self._thinking = False
+        self._lock = threading.Lock()
+        self._printed_tokens: Set[str] = set()
 
     def on_llm_start(self, *_, **__):  # pragma: no cover
         self._thinking = True
         stream_text("🧠 AI is thinking...", delay=0.005)
 
     def on_llm_new_token(self, token: str, **_):  # pragma: no cover
-        if self._thinking:
-            self._thinking = False
-            stream_text("🤖 AI Response: ", delay=0.001, newline=False)
-        print(token, end="", flush=True)
-        self.tokens.append(token)
+        with self._lock:
+            if self._thinking:
+                self._thinking = False
+                stream_text("🤖 AI Response: ", delay=0.001, newline=False)
+            
+            # Only print if this token hasn't been printed yet
+            token_id = f"{len(self.tokens)}_{token}"
+            if token_id not in self._printed_tokens:
+                print(token, end="", flush=True)
+                self._printed_tokens.add(token_id)
+            
+            self.tokens.append(token)
 
     def on_llm_end(self, *_):  # pragma: no cover
         print()

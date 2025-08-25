@@ -265,6 +265,7 @@ def main():
                 force_streaming = getattr(args, 'force_streaming', False) or stream_mode
                 collaborative = getattr(args, 'collaborative', False)
                 max_iterations = getattr(args, 'max_iterations', 5)
+                intelligent_investigation = getattr(args, 'intelligent_investigation', False)
                 
                 print(f"🔗 Using connection mode: {connection_mode}")
                 if force_streaming:
@@ -275,11 +276,14 @@ def main():
                         details={
                             "query": args.query[:100] + "..." if len(args.query) > 100 else args.query,
                             "streaming": True,
-                            "collaborative": collaborative
+                            "collaborative": collaborative,
+                            "intelligent_investigation": intelligent_investigation
                         }
                     )
                 if collaborative:
                     print(f"🤝 Collaborative mode enabled (max {max_iterations} iterations)")
+                if intelligent_investigation:
+                    print(f"🧠 Intelligent investigation mode enabled with dynamic model switching")
                 
                 result = run_single_query(
                     args.query, 
@@ -289,7 +293,8 @@ def main():
                     interception_mode, 
                     force_streaming,
                     collaborative=collaborative,
-                    max_iterations=max_iterations
+                    max_iterations=max_iterations,
+                    intelligent_investigation=intelligent_investigation
                 )
                 print(result)
                 logger.log_agent_operation(
