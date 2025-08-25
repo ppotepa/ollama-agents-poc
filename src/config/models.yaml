@@ -23,6 +23,7 @@ models:
       - read_file
       - append_file
       - list_files
+      - list_files_recurse
       - delete_file
       - copy_file
       # Project operations
@@ -41,6 +42,9 @@ models:
       - analyze_repo_languages
       - analyze_repo_directories
       - get_repository_state
+      # Model management
+      - request_model_swap
+      - suggest_better_model
     system_message: |
       You are DeepCoder, an advanced AI coding assistant with comprehensive capabilities similar to GitHub Copilot.
       
@@ -127,6 +131,8 @@ models:
       - system
       - project
       - code_execution
+      - request_model_swap
+      - suggest_better_model
 
   qwen2_5_coder_7b:
     name: "Qwen 2.5 Coder 7B"
@@ -146,6 +152,8 @@ models:
       - file_ops
       - project
       - code_execution
+      - request_model_swap
+      - suggest_better_model
 
   # Gemma model
   gemma_7b:
@@ -165,6 +173,8 @@ models:
     tools:
       - system
       - web
+      - request_model_swap
+      - suggest_better_model
 
   # CodeLlama models
   codellama_13b:

@@ -1048,8 +1048,27 @@ def is_git_url(url: str) -> bool:
     return any(pattern in url_lower for pattern in git_patterns)
 
 
-def get_agent_instance(agent_name: str):
+def get_agent_instance(agent_name: str, streaming: bool = True):
     """Get the appropriate agent instance based on the agent name."""
+    try:
+        # Use the new DynamicAgentFactory for creating agents
+        from src.core.agent_factory import get_agent_factory
+        
+        factory = get_agent_factory(streaming=streaming)
+        agent = factory.get_or_create_agent(agent_name)
+        
+        if agent:
+            print(f"✅ Created agent using DynamicAgentFactory: {agent_name} (streaming: {streaming})")
+            return agent
+        
+        # Fallback to legacy system if DynamicAgentFactory fails
+        print(f"⚠️ DynamicAgentFactory failed, falling back to legacy system")
+        
+    except Exception as e:
+        print(f"⚠️ Error with DynamicAgentFactory: {e}")
+        # Continue to legacy fallback
+    
+    # Legacy fallback system
     import sys
     try:
         # Add parent directory to path for imports
@@ -1066,6 +1085,7 @@ def get_agent_instance(agent_name: str):
             for model in config_reader.get_all_models():
                 if (agent_name in model.model_id or 
                     model.model_id.startswith(agent_name) or
+                    model.model_id == agent_name or  # Exact model ID match
                     agent_name in model.short_name):
                     model_config = model
                     break
@@ -1084,33 +1104,47 @@ def get_agent_instance(agent_name: str):
             "supports_coding": model_config.supports_coding
         }
         
-        # Determine which agent implementation to use based on agent type
-        if agent_name.lower() in ['deepcoder', 'coder'] or model_config.supports_coding:
-            # Use the sophisticated DeepCoderAgent for coding agents
-            try:
-                from src.agents.deepcoder.agent import create_agent
-                return create_agent(agent_name, agent_config)
-            except ImportError:
-                print(f"⚠️  Warning: DeepCoderAgent not available, falling back to simple agent")
-                # Import SimpleQueryAgent from single_query_mode
-                from .single_query_mode import SimpleQueryAgent
-                return SimpleQueryAgent(agent_name, agent_config)
-        else:
-            # Use simple agent for non-coding agents
+        # Use UniversalAgent for all agent types
+        try:
+            from src.agents.universal.agent import create_universal_agent
+            return create_universal_agent(agent_name, agent_config, model_config.model_id, streaming)
+        except ImportError:
+            print(f"⚠️  Warning: UniversalAgent not available, falling back to simple agent")
+            # Import SimpleQueryAgent from single_query_mode
             from .single_query_mode import SimpleQueryAgent
             return SimpleQueryAgent(agent_name, agent_config)
             
     except Exception as e:
         print(f"⚠️  Warning: Could not load proper agent, using fallback: {e}")
-        # Create a basic fallback config
+        # Create a basic fallback config with proper model mapping
+        model_mapping = {
+            'phi3_mini': 'phi3:mini',
+            'deepcoder': 'deepcoder:14b',
+            'deepcoder:14b': 'deepcoder:14b',  # Allow direct model ID
+            'qwen2.5-coder:7b': 'qwen2.5-coder:7b',
+            'qwen2.5:7b-instruct-q4_K_M': 'qwen2.5:7b-instruct-q4_K_M',
+            'qwen2.5:3b-instruct-q4_K_M': 'qwen2.5:3b-instruct-q4_K_M',
+            'gemma:7b-instruct-q4_K_M': 'gemma:7b-instruct-q4_K_M',
+            'codellama:13b-instruct': 'codellama:13b-instruct',
+            'mistral:7b-instruct': 'mistral:7b-instruct',
+            'assistant': 'qwen2.5:3b-instruct-q4_K_M',  # Use available model
+            'coder': 'qwen2.5-coder:7b'
+        }
+        
         fallback_config = {
             'name': agent_name.title(),
-            'model_id': agent_name,
-            'backend_image': agent_name,
+            'model_id': model_mapping.get(agent_name, agent_name),
+            'backend_image': model_mapping.get(agent_name, agent_name),
             'parameters': {'temperature': 0.7, 'num_ctx': 8192},
             'tools': [],
             'system_message': "You are an AI assistant.",
             'supports_coding': True
         }
-        from .single_query_mode import SimpleQueryAgent
-        return SimpleQueryAgent(agent_name, fallback_config)
+        
+        # Try UniversalAgent first, then fallback to SimpleQueryAgent
+        try:
+            from src.agents.universal.agent import create_universal_agent
+            return create_universal_agent(agent_name, fallback_config, fallback_config['model_id'], streaming)
+        except ImportError:
+            from .single_query_mode import SimpleQueryAgent
+            return SimpleQueryAgent(agent_name, fallback_config)

@@ -14,6 +14,7 @@ _MODULES = [
 	"src.tools.exec_ops",
 	"src.tools.web_ops",
 	"src.tools.repository_context_tool",
+	"src.tools.model_swap",
 ]
 
 for _m in _MODULES:  # pragma: no cover

@@ -15,10 +15,24 @@ if src_path not in sys.path:
 from config.arguments import get_parser, load_parameters
 from core.helpers import validate_repository_requirement
 from core.enums import AgentCapability
+from utils.enhanced_logging import get_logger, log_agent_start
 
 
 def main():
     """Main application entry point."""
+    # Clear the console for a clean start
+    os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # Print welcome banner
+    print("="*80)
+    print("🤖 OLLAMA AGENTS - Intelligent Coding Assistant".center(80))
+    print("="*80)
+    print()
+    
+    # Initialize enhanced logging
+    logger = get_logger(enable_console=True)
+    logger.info("Application started")
+    
     try:
         # Store original working directory
         original_cwd = os.getcwd()
@@ -121,12 +135,46 @@ def main():
             uvicorn.run(app, host=host, port=port)
             return
         
-        print(f"Starting agent: {args.agent}")
-        
-        # Ensure agent is specified
+        # Agent resolution logic
+        resolved_agent = args.agent
         if not args.agent:
-            print("Error: No agent specified. Use --agent <name> or see available options with --list-agents")
-            sys.exit(1)
+            # If no agent specified, try to resolve the best one for the query
+            if hasattr(args, 'query') and args.query:
+                print("🔍 No agent specified, analyzing query to find best suitable model...")
+                
+                from core.agent_resolver import create_agent_resolver
+                resolver = create_agent_resolver(max_size_b=14.0)
+                resolved_agent = resolver.resolve_best_agent(args.query)
+                
+                if resolved_agent:
+                    print(f"✅ Auto-selected agent: {resolved_agent}")
+                    
+                    # Show recommendations for transparency
+                    recommendations = resolver.get_model_recommendations(args.query, top_n=3)
+                    if len(recommendations) > 1:
+                        print("🎯 Top model recommendations:")
+                        for i, rec in enumerate(recommendations[:3], 1):
+                            size = rec.size_in_billions
+                            size_str = f" ({size}B)" if size > 0 else ""
+                            score_str = f"score: {rec.score:.1f}"
+                            selected = "👑 " if i == 1 else f"   {i}. "
+                            reasoning = ", ".join(rec.reasoning[:2])  # Show first 2 reasons
+                            print(f"{selected}{rec.model_id}{size_str} - {score_str} ({reasoning})")
+                        print()
+                else:
+                    print("❌ Could not auto-resolve suitable agent for your query.")
+                    print("Please specify an agent manually using --agent <name>")
+                    print("Available options: --list-agents")
+                    sys.exit(1)
+            else:
+                print("Error: No agent specified. Use --agent <name> or see available options with --list-agents")
+                print("For automatic agent selection, provide a query: --query 'your question'")
+                sys.exit(1)
+        
+        print(f"Starting agent: {resolved_agent}")
+        
+        # Update args.agent to use resolved agent for the rest of the flow
+        args.agent = resolved_agent
         
         # Get git URL if provided (check multiple possible argument names)
         git_url = None
@@ -194,10 +242,18 @@ def main():
         fast_mode = hasattr(args, 'fast') and args.fast
         fast_all_mode = hasattr(args, 'fast_all') and args.fast_all
         
+        # Default streaming mode (enabled unless -fa flag is used)
+        stream_mode = not fast_all_mode
+        
         if fast_all_mode:
             print("⚡ Fast all mode: Disabling tokenization & streaming everywhere")
+            logger.info("Fast all mode enabled - streaming disabled")
         elif fast_mode:
-            print("🚀 Fast menu mode: Skipping tokenized output for menus")
+            print("🚀 Fast menu mode: Skipping tokenized output for menus") 
+            logger.info("Fast menu mode enabled - streaming enabled for agents")
+        else:
+            print("🎬 Streaming mode enabled (use -fa to disable)")
+            logger.info("Default streaming mode enabled")
         
         # Handle query mode (direct chat input)
         if hasattr(args, 'query') and args.query:
@@ -206,13 +262,22 @@ def main():
             try:
                 connection_mode = getattr(args, 'connection_mode', 'hybrid')
                 interception_mode = getattr(args, 'interception_mode', 'smart')
-                force_streaming = getattr(args, 'force_streaming', False)
+                force_streaming = getattr(args, 'force_streaming', False) or stream_mode
                 collaborative = getattr(args, 'collaborative', False)
                 max_iterations = getattr(args, 'max_iterations', 5)
                 
                 print(f"🔗 Using connection mode: {connection_mode}")
                 if force_streaming:
-                    print(f"🎬 Streaming mode enabled")
+                    print(f"🎬 Streaming mode active")
+                    logger.log_agent_operation(
+                        agent_name=args.agent,
+                        operation="query_mode_start",
+                        details={
+                            "query": args.query[:100] + "..." if len(args.query) > 100 else args.query,
+                            "streaming": True,
+                            "collaborative": collaborative
+                        }
+                    )
                 if collaborative:
                     print(f"🤝 Collaborative mode enabled (max {max_iterations} iterations)")
                 
@@ -227,32 +292,51 @@ def main():
                     max_iterations=max_iterations
                 )
                 print(result)
+                logger.log_agent_operation(
+                    agent_name=args.agent,
+                    operation="query_completed",
+                    details={"result_length": len(result) if result else 0}
+                )
             except Exception as e:
                 print(f"❌ Error running query: {e}")
+                logger.error(f"Query execution failed for agent {args.agent}", e)
                 if hasattr(args, 'verbose') and args.verbose:
                     import traceback
                     traceback.print_exc()
         else:
             # Interactive mode
             print(f"🔄 Interactive mode for agent: {args.agent}")
+            logger.log_agent_operation(
+                agent_name=args.agent,
+                operation="interactive_mode_start",
+                details={
+                    "streaming": stream_mode,
+                    "fast_mode": fast_mode,
+                    "fast_all_mode": fast_all_mode
+                }
+            )
             
             # Start the generic interactive session (it will handle repository prompting internally)
             from core.generic_interactive_mode import run_interactive_session
             try:
-                run_interactive_session(args.agent)
+                run_interactive_session(args.agent, stream_mode=stream_mode)
             except Exception as e:
                 print(f"❌ Error starting interactive session: {e}")
+                logger.error(f"Interactive session failed for agent {args.agent}", e)
                 if hasattr(args, 'verbose') and args.verbose:
                     import traceback
                     traceback.print_exc()
             
         print("✅ Agent session completed!")
+        logger.info("Agent session completed successfully")
         
     except KeyboardInterrupt:
         print("\nOperation cancelled by user")
+        logger.info("Operation cancelled by user (KeyboardInterrupt)")
         sys.exit(0)
     except Exception as e:
         print(f"Error: {e}")
+        logger.error("Application error", e)
         if hasattr(args, 'verbose') and args.verbose:
             import traceback
             traceback.print_exc()

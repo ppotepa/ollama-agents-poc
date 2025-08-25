@@ -93,9 +93,10 @@ class LoadingIndicator:
 class GenericInteractiveAgent:
     """Generic interactive agent that can work with any model configuration."""
     
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, stream_mode: bool = True):
         """Initialize the interactive agent with the specified agent configuration."""
         self.agent_name = agent_name
+        self.stream_mode = stream_mode
         self.agent = None
         self.model_config = None
         
@@ -467,10 +468,10 @@ class GenericInteractiveAgent:
 
 
 # Public functions for main.py compatibility
-def run_interactive_session(agent_name: str):
+def run_interactive_session(agent_name: str, stream_mode: bool = True):
     """Run an interactive session with any agent."""
     try:
-        agent = GenericInteractiveAgent(agent_name)
+        agent = GenericInteractiveAgent(agent_name, stream_mode=stream_mode)
         agent.run_interactive_session()
     except Exception as e:
         print(f"❌ Error starting interactive session for '{agent_name}': {e}")

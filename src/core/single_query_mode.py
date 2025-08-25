@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 
-def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5) -> str:
+def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5, streaming: bool = True) -> str:
     """Run a query using collaborative back-and-forth between main agent and interceptor."""
     try:
         from src.core.collaborative_system import create_collaborative_system
@@ -15,10 +15,11 @@ def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5
         print(f"🤝 Starting collaborative query execution")
         print(f"🤖 Main agent: {agent_name}")
         print(f"🔄 Max iterations: {max_iterations}")
+        print(f"🎬 Streaming: {streaming}")
         print("=" * 60)
         
-        # Get the main agent instance
-        main_agent = get_agent_instance(agent_name)
+        # Get the main agent instance with streaming configuration
+        main_agent = get_agent_instance(agent_name, streaming=streaming)
         
         # Create collaborative system
         collaborative_system = create_collaborative_system(main_agent, max_iterations)
@@ -45,7 +46,7 @@ def run_collaborative_query(query: str, agent_name: str, max_iterations: int = 5
         traceback.print_exc()
         # Fallback to regular single query
         print(f"🔄 Falling back to regular single query mode")
-        return run_single_query(query, agent_name, collaborative=False)
+        return run_single_query(query, agent_name, collaborative=False, force_streaming=streaming)
 
 
 def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid", repository_url: str = None, interception_mode: str = "smart", force_streaming: bool = False, collaborative: bool = False, max_iterations: int = 5) -> str:
@@ -62,7 +63,7 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         # **COLLABORATIVE MODE**: Use iterative back-and-forth between agents
         if collaborative:
             print(f"🤝 Enabling collaborative mode with {max_iterations} max iterations")
-            return run_collaborative_query(query, agent_name, max_iterations)
+            return run_collaborative_query(query, agent_name, max_iterations, force_streaming)
         
         # **PROMPT INTERCEPTION**: Intercept and enhance the prompt with contextual information
         print(f"🧠 Intercepting and analyzing prompt...")
@@ -143,7 +144,7 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         if not connection.connect():
             print(f"❌ Failed to establish {connection_mode} connection")
             # Fall back to direct Ollama connection
-            return run_single_query_direct_ollama(query, agent_name)
+            return run_single_query_direct_ollama(query, agent_name, streaming=force_streaming)
         
         print(f"✅ Connection established via {connection_mode} mode")
         
@@ -177,7 +178,7 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         # Fall back to agent-based processing
         if force_streaming:
             print(f"🎬 Forcing direct streaming connection...")
-            return run_single_query_direct_ollama(enhanced_query, agent_name, interceptor_data)
+            return run_single_query_direct_ollama(enhanced_query, agent_name, interceptor_data, streaming=force_streaming)
         
         # Use server-based processing (default)
         print(f"🤖 Using server-based agent processing for enhanced query")
@@ -192,14 +193,14 @@ def run_single_query(query: str, agent_name: str, connection_mode: str = "hybrid
         
         # Final fallback to direct Ollama with enhanced query
         print(f"🔄 Falling back to direct Ollama connection...")
-        return run_single_query_direct_ollama(enhanced_query, agent_name)
+        return run_single_query_direct_ollama(enhanced_query, agent_name, streaming=force_streaming)
         
     except Exception as e:
         print(f"❌ Error in run_single_query: {e}")
         # Use enhanced query if available, otherwise use original
         fallback_query = enhanced_query if 'enhanced_query' in locals() else query
         fallback_interceptor_data = interceptor_data if 'interceptor_data' in locals() else None
-        return run_single_query_direct_ollama(fallback_query, agent_name, fallback_interceptor_data)
+        return run_single_query_direct_ollama(fallback_query, agent_name, fallback_interceptor_data, streaming=force_streaming)
     finally:
         # Clean up connection
         if connection:
@@ -243,11 +244,14 @@ def query_via_server(query: str, agent_name: str, server_url: str) -> str:
         raise
 
 
-def run_single_query_direct_ollama(query: str, agent_name: str, interceptor_data: dict = None) -> str:
+def run_single_query_direct_ollama(query: str, agent_name: str, interceptor_data: dict = None, streaming: bool = True) -> str:
     """Original direct Ollama connection as fallback."""
     try:
         print(f"🔄 Using direct Ollama connection for fallback")
-        agent = get_agent_instance(agent_name)
+        
+        # Use the helpers version which supports streaming
+        from src.core.helpers import get_agent_instance as helpers_get_agent_instance
+        agent = helpers_get_agent_instance(agent_name, streaming=streaming)
         
         # Prepare agent context with interceptor data
         agent_context = {}
@@ -331,7 +335,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 
-def get_agent_instance(agent_name: str):
+def get_agent_instance(agent_name: str, streaming: bool = True):
     """Get the appropriate agent instance based on the agent name."""
     try:
         # Add parent directory to path for imports

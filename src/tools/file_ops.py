@@ -294,6 +294,122 @@ def list_files(directory: str = ".", pattern: str = "*", detailed: bool = True) 
         return f"❌ Error listing directory: {e}"
 
 
+def list_files_recurse(directory: str = ".", pattern: str = "*", detailed: bool = True, max_depth: int = 10) -> str:
+    """Recursively list all files and directories with detailed information."""
+    if not os.path.exists(directory):
+        return f"❌ Directory {directory} does not exist"
+    
+    if max_depth <= 0:
+        return f"❌ Max depth must be greater than 0 (provided: {max_depth})"
+    
+    try:
+        result_lines = []
+        result_lines.append(f"📁 Recursive Directory Listing of {os.path.abspath(directory)}")
+        result_lines.append(f"🔍 Pattern: {pattern}, Max Depth: {max_depth}")
+        result_lines.append("")
+        
+        if detailed:
+            result_lines.append(f"{'Path':<60} {'Date/Time':<20} {'Perms':<6} {'Size':<12}")
+            result_lines.append("=" * 120)
+        
+        total_files = 0
+        total_directories = 0
+        total_size = 0
+        current_depth = 0
+        
+        def _walk_directory(current_dir: str, depth: int, prefix: str = ""):
+            """Recursively walk directory structure."""
+            nonlocal total_files, total_directories, total_size
+            
+            if depth > max_depth:
+                return
+            
+            try:
+                # Get items in current directory
+                search_pattern = os.path.join(current_dir, pattern)
+                items = glob.glob(search_pattern)
+                
+                if not items and depth == 0:
+                    # If no items match pattern in root, try to list all items
+                    items = glob.glob(os.path.join(current_dir, "*"))
+                
+                # Separate directories and files
+                directories = []
+                files = []
+                
+                for item in items:
+                    if os.path.isdir(item):
+                        directories.append(item)
+                    elif os.path.isfile(item):
+                        files.append(item)
+                
+                directories.sort()
+                files.sort()
+                
+                # Process directories first
+                for dir_path in directories:
+                    total_directories += 1
+                    rel_path = os.path.relpath(dir_path, directory)
+                    display_path = f"{prefix}📁 {rel_path}/"
+                    
+                    if detailed:
+                        date_str = _format_file_date(dir_path)
+                        perms = _format_file_permissions(dir_path)
+                        result_lines.append(f"{display_path:<60} {date_str:<20} {perms:<6} {'<DIR>':<12}")
+                    else:
+                        result_lines.append(display_path)
+                    
+                    # Recursively process subdirectory
+                    if depth < max_depth:
+                        _walk_directory(dir_path, depth + 1, prefix + "  ")
+                
+                # Process files
+                for file_path in files:
+                    try:
+                        total_files += 1
+                        rel_path = os.path.relpath(file_path, directory)
+                        display_path = f"{prefix}📄 {rel_path}"
+                        
+                        if detailed:
+                            date_str = _format_file_date(file_path)
+                            perms = _format_file_permissions(file_path)
+                            size = os.path.getsize(file_path)
+                            size_str = _format_file_size(size)
+                            total_size += size
+                            
+                            result_lines.append(f"{display_path:<60} {date_str:<20} {perms:<6} {size_str:<12}")
+                        else:
+                            result_lines.append(display_path)
+                            
+                    except (OSError, IOError) as e:
+                        # Handle files that can't be accessed
+                        display_path = f"{prefix}❌ {os.path.relpath(file_path, directory)}"
+                        if detailed:
+                            result_lines.append(f"{display_path:<60} {'Error':<20} {'----':<6} {'<ERROR>':<12}")
+                        else:
+                            result_lines.append(display_path)
+                
+            except Exception as e:
+                result_lines.append(f"{prefix}❌ Error accessing {current_dir}: {e}")
+        
+        # Start recursive walk
+        _walk_directory(directory, 0)
+        
+        # Summary
+        result_lines.append("=" * 120)
+        result_lines.append(f"📊 Summary:")
+        result_lines.append(f"   📁 {total_directories} directories")
+        result_lines.append(f"   📄 {total_files} files")
+        if detailed:
+            result_lines.append(f"   📏 Total size: {_format_file_size(total_size)} ({total_size:,} bytes)")
+        result_lines.append(f"   🔍 Max depth reached: {min(max_depth, current_depth)}")
+        
+        return "\n".join(result_lines)
+        
+    except Exception as e:
+        return f"❌ Error during recursive listing: {e}"
+
+
 def delete_file(filepath: str) -> str:
     """Delete a file or directory with detailed feedback."""
     if not os.path.exists(filepath):
@@ -378,7 +494,7 @@ def copy_file(source: str, destination: str) -> str:
 
 
 if LANGCHAIN_AVAILABLE:
-    for fn in [write_file, read_file, append_file, list_files, delete_file, copy_file, get_file_info]:
+    for fn in [write_file, read_file, append_file, list_files, list_files_recurse, delete_file, copy_file, get_file_info]:
         register_tool(StructuredTool.from_function(fn, name=fn.__name__, description=fn.__doc__ or fn.__name__))
 else:
     class _Wrap:
@@ -388,7 +504,7 @@ else:
             self.description = fn.__doc__ or fn.__name__
         def __call__(self, *a, **kw):  # pragma: no cover
             return self._fn(*a, **kw)
-    for _f in [write_file, read_file, append_file, list_files, delete_file, copy_file, get_file_info]:
+    for _f in [write_file, read_file, append_file, list_files, list_files_recurse, delete_file, copy_file, get_file_info]:
         register_tool(_Wrap(_f))
 
-__all__ = ["write_file", "read_file", "append_file", "list_files", "delete_file", "copy_file", "get_file_info"]
+__all__ = ["write_file", "read_file", "append_file", "list_files", "list_files_recurse", "delete_file", "copy_file", "get_file_info"]
