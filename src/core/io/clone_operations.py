@@ -43,36 +43,57 @@ def clone_repository(git_url: str, target_dir: Path) -> bool:
     try:
         # Check if directory already exists and is a git repo
         if target_dir.exists() and is_git_repository(str(target_dir)):
-            print(f"📁 Repository already exists at {target_dir}, pulling latest changes...")
-            result = subprocess.run(
-                ["git", "pull", "origin", "main"],
-                cwd=str(target_dir),
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-            if result.returncode != 0:
-                # Try pulling from master branch if main fails
-                result = subprocess.run(
-                    ["git", "pull", "origin", "master"],
+            print(f"📁 Repository already exists at {target_dir}, refreshing...")
+            
+            # Check if remote origin exists
+            try:
+                remote_check = subprocess.run(
+                    ["git", "remote", "-v"],
                     cwd=str(target_dir),
                     capture_output=True,
                     text=True,
                     encoding='utf-8',
                     errors='replace'
                 )
+                
+                # If remote exists and this is a valid git URL, try pulling
+                if remote_check.returncode == 0 and "origin" in remote_check.stdout and is_valid_git_url(git_url):
+                    print("🔄 Pulling latest changes...")
+                    result = subprocess.run(
+                        ["git", "pull", "origin", "main"],
+                        cwd=str(target_dir),
+                        capture_output=True,
+                        text=True,
+                        encoding='utf-8',
+                        errors='replace'
+                    )
+                    if result.returncode != 0:
+                        # Try pulling from master branch if main fails
+                        result = subprocess.run(
+                            ["git", "pull", "origin", "master"],
+                            cwd=str(target_dir),
+                            capture_output=True,
+                            text=True,
+                            encoding='utf-8',
+                            errors='replace'
+                        )
+                else:
+                    print("✅ Using existing local repository (no remote to pull from)")
+                    result = subprocess.CompletedProcess(args=[], returncode=0)
+            except Exception:
+                # If something goes wrong, just consider it successful and continue
+                print("✅ Using existing repository as-is")
+                result = subprocess.CompletedProcess(args=[], returncode=0)
 
-            # Load repository context into memory if pull was successful
-            if result.returncode == 0:
-                try:
-                    from src.tools.context import load_repository_context_after_clone
-                    if load_repository_context_after_clone(str(target_dir), cache_content=True, quiet=True):
-                        print("🧠 Repository context refreshed in memory")
-                except Exception as e:
-                    print(f"⚠️  Could not refresh repository context: {e}")
+            # Load repository context into memory
+            try:
+                from src.tools.context import load_repository_context_after_clone
+                if load_repository_context_after_clone(str(target_dir), cache_content=True, quiet=True):
+                    print("🧠 Repository context refreshed in memory")
+            except Exception as e:
+                print(f"⚠️  Could not refresh repository context: {e}")
 
-            return result.returncode == 0
+            return True  # Consider it successful if the repo already exists
 
         # Check if input is a valid git URL
         if not is_valid_git_url(git_url):

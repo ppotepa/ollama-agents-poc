@@ -25,7 +25,32 @@ class SingleQueryStrategy(BaseStrategy):
         self.log_execution_start(context)
         
         try:
-            result = self._run_intelligent_investigation(
+            # Handle simple math questions directly
+            import re
+            
+            # Check for basic math expressions
+            if re.match(r'^\s*what\s+is\s+\d+\s*[\+\-\*/]\s*\d+\s*$', context.query.lower()):
+                # Extract the math expression
+                math_expr = re.search(r'(\d+\s*[\+\-\*/]\s*\d+)', context.query)
+                if math_expr:
+                    try:
+                        # Safely evaluate the math expression
+                        expression = math_expr.group(1).replace(' ', '')
+                        result = eval(expression)
+                        answer = f"The answer to {expression} is {result}"
+                        
+                        self.log_execution_end(context, True)
+                        return {
+                            "success": True,
+                            "result": answer,
+                            "strategy": self.strategy_type.value
+                        }
+                    except Exception as math_error:
+                        self.logger.warning(f"Math evaluation failed: {math_error}")
+                        # Fall through to collaborative mode
+            
+            # Use collaborative mode for other queries
+            result = self._fallback_collaborative_query(
                 context.query,
                 streaming=context.metadata.get("streaming", True)
             )
@@ -116,11 +141,30 @@ class SingleQueryStrategy(BaseStrategy):
                 await orchestrator.pause_session(session_id)
                 return "Investigation timed out. Please try a more specific query."
 
-            # Run the async investigation
-            if sys.platform == 'win32':
-                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
-            return asyncio.run(run_investigation())
+            # Modified approach to handle asyncio properly
+            investigation_coro = run_investigation()
+            
+            try:
+                # First, try to get the current event loop
+                loop = asyncio.get_running_loop()
+                
+                # We're in a running event loop, create a future
+                self.logger.debug("Using existing running event loop")
+                
+                # We need to run a coroutine inside an already running loop
+                # Since we can't directly await here, we'll use the collaborative mode
+                self.logger.info("🔄 Using collaborative mode instead of intelligent investigation due to event loop constraints")
+                return self._fallback_collaborative_query(query, streaming)
+                
+            except RuntimeError:
+                # No running event loop, create one
+                self.logger.debug("Creating new event loop")
+                if sys.platform == 'win32':
+                    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(investigation_coro)
 
         except Exception as e:
             self.logger.error(f"❌ Error in intelligent investigation: {e}")

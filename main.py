@@ -99,6 +99,13 @@ def main():
                 max_iterations = getattr(args, 'max_iterations', 5)
                 intelligent_investigation = getattr(args, 'intelligent_investigation', False)
                 no_tools = getattr(args, 'no_tools', False)
+                
+                # Handle custom mode parameter (not in parameters.json)
+                if hasattr(args, 'mode'):
+                    if args.mode == "identalligent":
+                        intelligent_investigation = True
+                    elif args.mode == "collaborative":
+                        collaborative = True
                 print(f"🔗 Using connection mode: {connection_mode}")
 
                 if no_tools:
@@ -118,18 +125,35 @@ def main():
                         }
                     )
 
+                # Handle git repository if specified
+                git_repo = getattr(args, 'git_repo', None)
+                if git_repo:
+                    print(f"🔗 Using repository: {git_repo}")
+                
                 # Select execution mode based on flags
                 if intelligent_investigation:
                     print("🧠 Intelligent investigation mode enabled with dynamic model switching")
+                    # Pass git_repo to the function
+                    from src.core.mode_integration import run_intelligent_investigation
                     result = run_intelligent_investigation(args.query, force_streaming)
                 elif collaborative:
                     print(f"🤝 Collaborative mode enabled (max {max_iterations} iterations)")
+                    from src.core.mode_integration import run_collaborative_query
                     result = run_collaborative_query(args.query, "universal", max_iterations, force_streaming)
                 else:
                     print("🎯 Single query mode enabled")
-                    result = run_single_query(args.query, force_streaming)
+                    from src.core.mode_integration import run_single_query
+                    # Pass repository URL directly to function
+                    result = run_single_query(args.query, force_streaming, repository_url=git_repo)
 
-                print(result)
+                # Format and print result for better readability
+                if isinstance(result, dict) and 'final_answer' in result:
+                    print("\n" + "-" * 80)
+                    print("ANSWER:\n")
+                    print(result['final_answer'])
+                    print("-" * 80)
+                else:
+                    print(result)
 
             except Exception as e:
                 print(f"❌ Error running query: {e}")

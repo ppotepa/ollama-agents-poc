@@ -15,6 +15,105 @@ from .investigation import (
     DepthFirstStrategy
 )
 
+# Add missing strategies needed by other components
+class TargetedInvestigationStrategy(BaseInvestigationStrategy):
+    """Targeted investigation strategy - focuses on specific targets."""
+    
+    def __init__(self, strategy_type=None):
+        self.strategy_type = strategy_type or InvestigationStrategy.TARGETED
+        
+    def create_investigation_plan(self, query: str, context: dict = None) -> InvestigationPlan:
+        """Create a basic targeted investigation plan.
+        
+        Args:
+            query: The query to investigate
+            context: Optional context dictionary
+            
+        Returns:
+            A simple investigation plan
+        """
+        import uuid
+        plan_id = str(uuid.uuid4())[:8]
+        
+        # Create basic step
+        step = InvestigationStep(
+            step_id=f"step-{plan_id}-1",
+            description=f"Analyze query: {query}",
+            strategy=self.strategy_type,
+            priority=InvestigationPriority.HIGH,
+            estimated_duration=5.0,
+            required_models=["gpt-4"]
+        )
+        
+        return InvestigationPlan(
+            investigation_id=plan_id,
+            query=query,
+            strategy=self.strategy_type,
+            steps=[step],
+            total_estimated_duration=5.0,
+            success_criteria=["Answer found"]
+        )
+
+class ExploratoryInvestigationStrategy(BaseInvestigationStrategy):
+    """Exploratory investigation strategy stub."""
+    
+    def __init__(self, strategy_type=None):
+        self.strategy_type = strategy_type or InvestigationStrategy.EXPLORATORY
+        
+    def create_investigation_plan(self, query: str, context: dict = None) -> InvestigationPlan:
+        """Create a basic exploratory investigation plan."""
+        import uuid
+        plan_id = str(uuid.uuid4())[:8]
+        
+        # Create basic step
+        step = InvestigationStep(
+            step_id=f"step-{plan_id}-1",
+            description=f"Explore: {query}",
+            strategy=self.strategy_type,
+            priority=InvestigationPriority.MEDIUM,
+            estimated_duration=10.0,
+            required_models=["gpt-4"]
+        )
+        
+        return InvestigationPlan(
+            investigation_id=plan_id,
+            query=query,
+            strategy=self.strategy_type,
+            steps=[step],
+            total_estimated_duration=10.0,
+            success_criteria=["Exploration complete"]
+        )
+        
+class HypothesisDrivenInvestigationStrategy(BaseInvestigationStrategy):
+    """Hypothesis-driven investigation strategy stub."""
+    
+    def __init__(self, strategy_type=None):
+        self.strategy_type = strategy_type or InvestigationStrategy.HYPOTHESIS_DRIVEN
+        
+    def create_investigation_plan(self, query: str, context: dict = None) -> InvestigationPlan:
+        """Create a basic hypothesis-driven investigation plan."""
+        import uuid
+        plan_id = str(uuid.uuid4())[:8]
+        
+        # Create basic step
+        step = InvestigationStep(
+            step_id=f"step-{plan_id}-1",
+            description=f"Test hypothesis for: {query}",
+            strategy=self.strategy_type,
+            priority=InvestigationPriority.HIGH,
+            estimated_duration=15.0,
+            required_models=["gpt-4"]
+        )
+        
+        return InvestigationPlan(
+            investigation_id=plan_id,
+            query=query,
+            strategy=self.strategy_type,
+            steps=[step],
+            total_estimated_duration=15.0,
+            success_criteria=["Hypothesis tested"]
+        )
+
 # Typing imports for stubs
 from typing import Any
 
@@ -99,8 +198,11 @@ __all__ = [
     'InvestigationPlan',
     'BaseInvestigationStrategy',
     'DepthFirstStrategy',
-    'get_depth_first_strategy'
-    ,
+    'get_depth_first_strategy',
+    # New investigation strategies
+    'TargetedInvestigationStrategy',
+    'ExploratoryInvestigationStrategy',
+    'HypothesisDrivenInvestigationStrategy',
     # Backwards compatibility stubs
     'TaskAnalyzer',
     'InvestigationStrategyManager'

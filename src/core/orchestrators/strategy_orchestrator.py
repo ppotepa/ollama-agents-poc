@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from ..interfaces.orchestrator_interface import OrchestratorInterface, ExecutionSession
+from ..interfaces.orchestrator_interface import OrchestratorInterface, ExecutionSession, StrategyRegistry
 from ..strategies import ExecutionContext, get_strategy_registry
 
 
@@ -48,10 +48,41 @@ class StrategyOrchestrator(OrchestratorInterface):
             else:
                 error_msg = result.get("error", "Unknown error occurred")
                 raise RuntimeError(f"Strategy execution failed: {error_msg}")
-                
         except Exception as e:
             self.logger.error(f"Query execution failed: {e}")
             raise
+                
+    def set_strategy_registry(self, registry: StrategyRegistry) -> None:
+        """Set the strategy registry.
+        
+        Args:
+            registry: The strategy registry to use
+        """
+        self.strategy_registry = registry
+        
+    def get_execution_context(self, query: str, **kwargs) -> ExecutionContext:
+        """Build execution context for query.
+        
+        Args:
+            query: The query to execute
+            **kwargs: Additional context parameters
+            
+        Returns:
+            Built execution context
+        """
+        context = ExecutionContext(
+            query=query,
+            metadata=kwargs.get("metadata", {})
+        )
+        
+        # Add mode to metadata if specified
+        if "mode" in kwargs:
+            context.metadata["mode"] = kwargs["mode"]
+            
+        # Add streaming preference
+        context.metadata["streaming"] = self.enable_streaming
+        
+        return context
             
     async def start_session(self, query: str, mode: Optional[str] = None,
                            metadata: Optional[Dict[str, Any]] = None) -> str:

@@ -86,9 +86,19 @@ def validate_repository_requirement(
                     print(f"⚠️  Virtual repository setup failed: {e}")
                     # Fallback to normal cloning if virtual fails
 
+            # Set data path to default if not provided
+            if data_path is None:
+                data_path = "./data"
+            
+            print(f"🔄 Setting up repository: {git_url}")
+            print(f"📂 Data path: {data_path}")
+            
             # Normal cloning for full mode or fallback
             clone_dir = get_clone_directory(git_url, data_path)
+            print(f"🎯 Target directory: {clone_dir}")
+            
             if clone_repository(git_url, clone_dir):
+                print(f"✅ Repository successfully set up at: {clone_dir}")
                 return True, str(clone_dir)
             else:
                 raise ValueError(

@@ -63,16 +63,40 @@ def run_collaborative_query(query: str, mode: str = "universal",
 
 
 # Backward compatibility functions
-def run_single_query(query: str, streaming: bool = True) -> str:
+def run_single_query(query: str, streaming: bool = True, repository_url: str = None, metadata: Optional[Dict[str, Any]] = None) -> str:
     """Run a single query using single query strategy."""
     try:
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
             
+        # Prepare metadata with repository URL if provided
+        query_metadata = metadata or {}
+        if repository_url:
+            query_metadata["repository_url"] = repository_url
+            
+            # Import repository functions directly
+            from .io.clone_operations import get_clone_directory, clone_repository
+            
+            # Debug output for repository URL
+            print(f"🔍 Processing repository: {repository_url}")
+            
+            # Get expected clone directory and create/clone it directly
+            clone_dir = get_clone_directory(repository_url, "./data")
+            print(f"📁 Target directory: {clone_dir}")
+            
+            # Clone or create the repository directly
+            if clone_repository(repository_url, clone_dir):
+                print(f"✅ Repository successfully set up at: {clone_dir}")
+                query_metadata["working_directory"] = str(clone_dir)
+            else:
+                print(f"❌ Failed to set up repository: {repository_url}")
+                # Continue without repository
+            
         return asyncio.run(run_query_with_strategy(
             query,
             mode="single_query",
-            streaming=streaming
+            streaming=streaming,
+            metadata=query_metadata
         ))
     except Exception as e:
         return f"Single query failed: {e}"

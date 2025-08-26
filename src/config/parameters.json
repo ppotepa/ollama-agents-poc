@@ -125,6 +125,11 @@
       "action": "store_true",
       "help": "Enable intelligent investigation mode with dynamic model switching",
       "dest": "intelligent_investigation"
+    },
+    "mode": {
+      "type": "str",
+      "choices": ["collaborative", "intelligent"],
+      "help": "Execution mode: 'collaborative' (agent cooperation) or 'intelligent' (intelligent investigation)"
     }
   },
   "subcommands": {
