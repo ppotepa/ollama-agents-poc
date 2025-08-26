@@ -1,10 +1,9 @@
 """Interactive chat loop for Generic Ollama Agent."""
 from __future__ import annotations
 
-import os, re, threading, sys, time
-from typing import Callable, Optional
-
-from src.utils.animations import show_thinking_animation
+import re
+import sys
+import threading
 
 try:
     from src.utils.animations import is_fast_all
@@ -23,7 +22,7 @@ class BusyIndicator:
         self.colors = ["\033[97;100m", "\033[37;100m", "\033[2;37;100m", "\033[90;100m", "\033[2;90;100m"]
         self.dots = ["", ".", "..", "..."]
         self.interval = 0.35
-        self.thread: Optional[threading.Thread] = None
+        self.thread: threading.Thread | None = None
 
     def start(self):
         if not self.enabled:
@@ -75,10 +74,10 @@ def filter_stream_tokens():
     return _filter
 
 
-def interactive_chat(agent, emit_func=print, initial_query: Optional[str] = None):
+def interactive_chat(agent, emit_func=print, initial_query: str | None = None):
     """
     Start interactive chat session with agent.
-    
+
     Args:
         agent: The agent instance
         emit_func: Function to use for output
@@ -102,27 +101,27 @@ def interactive_chat(agent, emit_func=print, initial_query: Optional[str] = None
     if initial_query:
         emit_func(f"\n🧠 You > {initial_query}")
         process_user_input(initial_query)
-    
+
     # Continue with regular chat loop
     while True:
         try:
             emit_func("\n🧠 You > ", newline=False)
             user_input = input().strip()
-            
+
             # Process chat commands
             if user_input.startswith('/'):
                 if process_command(user_input):
                     continue  # Command was processed
                 else:
                     break  # Exit command
-                    
+
             # Skip empty inputs
             if not user_input:
                 continue
-                
+
             # Process normal input
             process_user_input(user_input)
-                
+
         except KeyboardInterrupt:
             if interrupt_count > 0:
                 # Second interrupt - exit
@@ -131,6 +130,21 @@ def interactive_chat(agent, emit_func=print, initial_query: Optional[str] = None
             interrupt_count += 1
             emit_func("\n⚠️ Interrupted. Type /exit to quit.")
             continue
-            
+
     emit_func("\n👋 Goodbye!")
     return
+
+
+def process_user_input(user_input: str):
+    """Process user input - placeholder function."""
+    # TODO: Implement actual user input processing
+    print(f"Processing: {user_input}")
+
+
+def process_command(command: str) -> bool:
+    """Process chat commands - placeholder function."""
+    # TODO: Implement actual command processing
+    if command in EXIT_ALIASES:
+        return False
+    print(f"Processing command: {command}")
+    return True

@@ -1,9 +1,7 @@
 """Banner and agent listing display utilities."""
 from __future__ import annotations
 
-from typing import List, Tuple
-
-from src.utils.animations import stream_text, progressive_reveal
+from src.utils.animations import progressive_reveal, stream_text
 
 FAST_MENU = False  # will be set by main via configure
 
@@ -29,20 +27,24 @@ def display_banner():
 
 def format_capabilities(cap: dict) -> str:
     icons = []
-    if cap.get('coding'): icons.append('💻 Coding')
-    if cap.get('file_operations'): icons.append('📁 Files')
-    if cap.get('streaming'): icons.append('⚡ Streaming')
-    if cap.get('general_qa'): icons.append('💬 Q&A')
+    if cap.get('coding'):
+        icons.append('💻 Coding')
+    if cap.get('file_operations'):
+        icons.append('📁 Files')
+    if cap.get('streaming'):
+        icons.append('⚡ Streaming')
+    if cap.get('general_qa'):
+        icons.append('💬 Q&A')
     return ' | '.join(icons) if icons else ''
 
-def list_agents(config_manager) -> List[str]:
+def list_agents(config_manager) -> list[str]:
     agents = config_manager.get_available_agents()
     if not agents:
         stream_text('❌ No agents configured. Please check config/agents.yaml')
         return []
     emit('\n📋 Available AI Agents:')
     emit('-' * 40, delay=0.01)
-    ordered: List[str] = []
+    ordered: list[str] = []
     for idx, (key, cfg) in enumerate(agents.items(), 1):
         name = cfg.get('name', key)
         desc = cfg.get('description', 'No description available')
@@ -60,7 +62,7 @@ def display_agent_info(cfg: dict):
     name = cfg.get('name', 'Unknown')
     backend = cfg.get('backend_image') or cfg.get('model_id', 'Unknown')
     provider = cfg.get('provider', 'local').title()
-    sections: List[Tuple[str, str]] = [
+    sections: list[tuple[str, str]] = [
         ('✅ Agent Selected:', name),
         ('🔧 Backend Image:', backend),
         ('🌐 Provider:', provider),

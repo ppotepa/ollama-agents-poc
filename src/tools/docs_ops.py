@@ -1,10 +1,13 @@
 """Documentation tools."""
 from __future__ import annotations
 
-import os, glob, re
+import glob
+import os
+import re
 
 try:
     from langchain.tools import StructuredTool
+
     from src.tools.registry import register_tool
     LANGCHAIN_AVAILABLE = True
 except Exception:
@@ -16,7 +19,7 @@ def generate_documentation(directory: str = ".", output_file: str = "API_DOCS.md
     docs = ["# API Documentation\n"]
     for fp in glob.glob(os.path.join(directory, "**", "*.py"), recursive=True):
         try:
-            with open(fp, "r", encoding="utf-8") as f:
+            with open(fp, encoding="utf-8") as f:
                 content = f.read()
             functions = re.findall(r'^def\s+(\w+)\(', content, re.MULTILINE)
             classes = re.findall(r'^class\s+(\w+)', content, re.MULTILINE)

@@ -6,7 +6,7 @@ Defines the common interface every concrete agent must implement. This keeps
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
 
 try:  # Optional import; we only need the flag helper
     from src.utils.animations import is_fast_all  # type: ignore
@@ -27,12 +27,12 @@ class AbstractAgent(ABC):
     agent_id: str
     display_name: str
 
-    def __init__(self, agent_id: str, config: Dict[str, Any]):
+    def __init__(self, agent_id: str, config: dict[str, Any]):
         self.agent_id = agent_id
         self.config = config
         self.display_name = config.get("name", agent_id)
         self._loaded = False
-        self._tools: List[Any] = []  # LangChain tools or plain callables
+        self._tools: list[Any] = []  # LangChain tools or plain callables
         self._llm: Any = None
         self.capabilities = config.get("capabilities", {})
 
@@ -48,7 +48,7 @@ class AbstractAgent(ABC):
         """Return underlying LLM client (or None if unavailable)."""
 
     @abstractmethod
-    def _build_tools(self) -> List[Any]:
+    def _build_tools(self) -> list[Any]:
         """Return list of tool objects (may be empty)."""
 
     def run(self, prompt: str) -> str:
@@ -80,12 +80,12 @@ class AbstractAgent(ABC):
         return text
 
     @property
-    def tools(self) -> List[Any]:
+    def tools(self) -> list[Any]:
         if not self._loaded:
             self.load()
         return self._tools
 
-    def tool_names(self) -> List[str]:
+    def tool_names(self) -> list[str]:
         names = []
         for t in self.tools:
             name = getattr(t, "name", None) or getattr(t, "__name__", None)

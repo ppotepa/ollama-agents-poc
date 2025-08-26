@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Dict, Any, Callable
+from typing import Any, Callable
 
-_FACTORIES: Dict[str, Callable[[str, Dict[str, Any]], Any]] = {}
-_ALIASES: Dict[str, str] = {}
+_FACTORIES: dict[str, Callable[[str, dict[str, Any]], Any]] = {}
+_ALIASES: dict[str, str] = {}
 
 
-def register(agent_key: str, factory: Callable[[str, Dict[str, Any]], Any]):
+def register(agent_key: str, factory: Callable[[str, dict[str, Any]], Any]):
     _FACTORIES[agent_key] = factory
 
 
@@ -16,7 +16,7 @@ def resolve_key(key: str) -> str:
     return _ALIASES.get(key, key)
 
 
-def create(agent_key: str, config: Dict[str, Any]):
+def create(agent_key: str, config: dict[str, Any]):
     key = resolve_key(agent_key)
     if key not in _FACTORIES:
         if key == "deepcoder":
@@ -27,7 +27,7 @@ def create(agent_key: str, config: Dict[str, Any]):
     return _FACTORIES[key](key, config)
 
 
-def list_registered() -> Dict[str, Callable]:
+def list_registered() -> dict[str, Callable]:
     return dict(_FACTORIES)
 
 

@@ -1,0 +1,65 @@
+# Vulture configuration for unused code detection
+# Documentation: https://github.com/jendrikseipp/vulture
+
+[tool.vulture]
+# Minimum confidence level (0-100) for unused code detection
+min_confidence = 80
+
+# Paths to check for unused code
+paths = ["src", "main.py", "test"]
+
+# Exclude patterns (glob patterns)
+exclude = [
+    "*/.venv/*",
+    "*/venv/*",
+    "*/__pycache__/*",
+    "*/.pytest_cache/*",
+    "*/.mypy_cache/*",
+    "*/build/*",
+    "*/dist/*",
+    "*/.git/*",
+    "*/data/*",
+    "*/logs/*",
+    "*/models/*",
+    "*/ollama-agents/*",
+    "*/.vs/*",
+    "*/.vscode/*",
+]
+
+# Sort output by confidence level
+sort_by_size = true
+
+# Make whitelist (for false positives)
+make_whitelist = false
+
+# Ignore names (regex patterns for names that should be ignored)
+ignore_names = [
+    "*_test",
+    "*_tests", 
+    "test_*",
+    "__*__",  # Magic methods
+    "_*",     # Private members
+    "setUp*",
+    "tearDown*",
+    "main",
+    "run_*",
+    "get_*_instance",
+    "*_handler",
+    "*_callback",
+    "*_endpoint",
+    "*_route",
+]
+
+# Ignore decorators (functions that might be called by decorators)
+ignore_decorators = [
+    "@app.route",
+    "@router.*",
+    "@click.*",
+    "@pytest.*",
+    "@patch",
+    "@mock.*",
+    "@property",
+    "@staticmethod",
+    "@classmethod",
+    "@abstractmethod",
+]

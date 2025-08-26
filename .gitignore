@@ -8,6 +8,7 @@ venv/
 env/
 ENV/
 .venv/
+ollama-agents/
 
 # Python libraries and packages
 lib/
@@ -32,19 +33,32 @@ site-packages/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and runtime files
 *.log
 logs/
+agent.pid
 
 # Temporary files
 *.tmp
 *.temp
 .temp/
+*.bak
+*.backup
 
 # Build artifacts
 build/
 dist/
 *.egg-info/
+
+# Configuration backups
+*.yaml.backup
+*.json.backup
+*.toml.backup
+
+# Model cache and generated files
+models_cache.json
+integration_test_analytics.json
+test_analytics.json
 
 # Heavy model files (exclude models folder and large model files)
 models/

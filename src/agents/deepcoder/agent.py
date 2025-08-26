@@ -1,72 +1,80 @@
 """DeepCoderAgent - concrete implementation using Ollama backend."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
+
 from src.agents.base.base_agent import AbstractAgent
 from src.utils.animations import stream_text
 
 try:  # LangChain optional
-    from langchain_ollama import ChatOllama
-    from langchain.agents import create_tool_calling_agent, AgentExecutor
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
     from langchain_core.prompts import ChatPromptTemplate
+    from langchain_ollama import ChatOllama
     LANGCHAIN_AVAILABLE = True
 except Exception:
     LANGCHAIN_AVAILABLE = False
     # Define dummy classes to avoid import errors
-    class ChatOllama: pass
-    class AgentExecutor: pass
-    def create_tool_calling_agent(*args, **kwargs): return None
-    class ChatPromptTemplate: 
-        @staticmethod
-        def from_messages(*args): return None
+    class ChatOllama:
+        pass
 
-from src.tools.registry import get_registered_tools  # registry list
+    class AgentExecutor:
+        pass
+
+    def create_tool_calling_agent(*args, **kwargs):
+        return None
+
+    class ChatPromptTemplate:
+        @staticmethod
+        def from_messages(*args):
+            return None
+
 import src.tools  # noqa: F401  # trigger side-effect imports & registration
+from src.tools.registry import get_registered_tools  # registry list
 
 
 class DeepCoderAgent(AbstractAgent):
-    def __init__(self, agent_id: str, config: Dict[str, Any]):
+    def __init__(self, agent_id: str, config: dict[str, Any]):
         super().__init__(agent_id, config)
         self._agent_executor = None
         self._supports_tools = None  # Cache tool support detection
-        
+
     def _check_tool_support(self) -> bool:
         """Check if the current model supports tool calling."""
         if self._supports_tools is not None:
             return self._supports_tools
-            
+
         if not LANGCHAIN_AVAILABLE or not self._llm:
             self._supports_tools = False
             return False
-        
+
         model_id = self.config.get("model_id", "unknown")
-        
+
         try:
             # Test tool support with a simple function call
             test_prompt = "Hello, can you help me?"
-            test_result = self._llm.invoke(test_prompt)
-            
+            self._llm.invoke(test_prompt)
+
             # If we can create a basic agent without tools, the model works
             # But we need to test actual tool calling capability
             try:
                 # Try to create a minimal tool-calling setup
                 from langchain.tools import tool
-                
+
                 @tool
                 def test_tool() -> str:
                     """Test tool for capability detection."""
                     return "test"
-                
+
                 test_agent = create_tool_calling_agent(
-                    self._llm, 
-                    [test_tool], 
+                    self._llm,
+                    [test_tool],
                     ChatPromptTemplate.from_messages([("human", "{input}")])
                 )
-                
+
                 if test_agent:
                     self._supports_tools = True
                     stream_text(f"✅ Model {model_id} supports tools")
-                    
+
                     # Log successful tool support
                     try:
                         from src.utils.enhanced_logging import get_logger
@@ -82,13 +90,13 @@ class DeepCoderAgent(AbstractAgent):
                 else:
                     self._supports_tools = False
                     stream_text(f"⚠️  Model {model_id} does not support tools - using LLM fallback")
-                    
+
             except Exception as tool_error:
                 self._supports_tools = False
                 error_msg = str(tool_error)
                 stream_text(f"⚠️  Tool support detection failed for {model_id}: {error_msg}")
                 stream_text("📝 Continuing with direct LLM mode (no tools)")
-                
+
                 # Log tool support failure
                 try:
                     from src.utils.enhanced_logging import get_logger
@@ -101,11 +109,11 @@ class DeepCoderAgent(AbstractAgent):
                     )
                 except Exception:
                     pass  # Don't fail if logging fails
-                
+
         except Exception as e:
             self._supports_tools = False
             stream_text(f"❌ Model connectivity test failed: {e}")
-            
+
         return self._supports_tools
 
     def stream(self, prompt: str, on_token):  # type: ignore[override]
@@ -113,7 +121,7 @@ class DeepCoderAgent(AbstractAgent):
             self.load()
         if not LANGCHAIN_AVAILABLE or self._llm is None:
             return super().stream(prompt, on_token)
-        final_tokens: List[str] = []
+        final_tokens: list[str] = []
         try:
             for chunk in self._llm.stream(prompt):  # type: ignore[attr-defined]
                 text = getattr(chunk, "content", None) or str(chunk)
@@ -124,16 +132,16 @@ class DeepCoderAgent(AbstractAgent):
             stream_text(f"❌ Streaming error: {e}")
             return ""
         return "".join(final_tokens)
-    
-    def stream_with_context(self, prompt: str, on_token, context: Dict[str, Any]):
+
+    def stream_with_context(self, prompt: str, on_token, context: dict[str, Any]):
         """Stream response with additional context from interceptor."""
         if context and 'interceptor_analysis' in context:
             interceptor_data = context['interceptor_analysis']
-            
+
             # Create enhanced prompt with interceptor context
             enhanced_prompt = f"""INTERCEPTOR ANALYSIS:
 Intent: {interceptor_data['detected_intent']} (confidence: {interceptor_data['confidence']:.2%})
-Commands executed: {interceptor_data['execution_stats']['total_commands']} 
+Commands executed: {interceptor_data['execution_stats']['total_commands']}
 Successful commands: {interceptor_data['execution_stats']['successful_commands']}
 Data gathered: {interceptor_data['execution_stats']['total_data_gathered']} chars
 Context types: {', '.join(interceptor_data['context_types'])}
@@ -143,11 +151,11 @@ COMMAND EXECUTION DETAILS:
 
 USER QUERY:
 {prompt}"""
-            
+
             return self.stream(enhanced_prompt, on_token)
         else:
             return self.stream(prompt, on_token)
-    
+
     def _build_llm(self) -> Any:  # noqa: D401
         if not LANGCHAIN_AVAILABLE:
             return None
@@ -160,9 +168,9 @@ USER QUERY:
         )
         return llm
 
-    def _build_tools(self) -> List[Any]:  # noqa: D401
+    def _build_tools(self) -> list[Any]:  # noqa: D401
         desired = set(self.config.get("tools", []))
-        selected: List[Any] = []
+        selected: list[Any] = []
         for t in get_registered_tools():
             name = getattr(t, "name", None)
             if name and name in desired:
@@ -178,20 +186,20 @@ USER QUERY:
         if not LANGCHAIN_AVAILABLE or not self._llm or not self._tools:
             stream_text("⚠️  Cannot build agent executor: missing requirements")
             return None
-        
+
         # Check if model supports tools before attempting to create executor
         if not self._check_tool_support():
             stream_text(f"📝 Model {self.config.get('model_id', 'unknown')} does not support tools")
             stream_text("🔄 Continuing in direct LLM mode (tools disabled)")
             return None
-        
+
         try:
             prompt_template = ChatPromptTemplate.from_messages([
                 ("system", self.config.get("system_message", "You are a helpful AI assistant.")),
                 ("human", "{input}"),
                 ("placeholder", "{agent_scratchpad}")
             ])
-            
+
             agent = create_tool_calling_agent(self._llm, self._tools, prompt_template)
             self._agent_executor = AgentExecutor(
                 agent=agent,
@@ -200,10 +208,10 @@ USER QUERY:
                 max_iterations=3,
                 handle_parsing_errors=True
             )
-            
+
             stream_text(f"✅ Agent executor created with {len(self._tools)} tools")
             return self._agent_executor
-            
+
         except Exception as e:
             self._supports_tools = False  # Mark as unsupported for future calls
             stream_text(f"❌ Failed to build agent executor: {e}")
@@ -213,13 +221,13 @@ USER QUERY:
     def load(self) -> None:
         """Load the agent and create agent executor with tools if supported."""
         super().load()
-        
+
         if LANGCHAIN_AVAILABLE and self._llm:
             # Only try to build agent executor if we have tools and the model supports them
             if self._tools and len(self._tools) > 0:
                 stream_text(f"🔧 Attempting to configure {len(self._tools)} tools...")
                 self._build_agent_executor()
-                
+
                 if not self._agent_executor:
                     stream_text("📝 Tools not supported by this model - continuing in LLM-only mode")
             else:
@@ -230,7 +238,7 @@ USER QUERY:
     def run(self, prompt: str) -> str:
         if not self._loaded:
             self.load()
-        
+
         # If we have a proper agent executor with tools, use it
         if self._agent_executor:
             try:
@@ -242,7 +250,7 @@ USER QUERY:
                 # Mark tools as unsupported for future calls
                 self._supports_tools = False
                 self._agent_executor = None
-        
+
         # Fallback: direct LLM call (no tools)
         if LANGCHAIN_AVAILABLE and self._llm:
             try:
@@ -255,20 +263,20 @@ Please analyze this query and provide helpful insights based on your knowledge. 
 
                 response = self._llm.invoke(enhanced_prompt)
                 content = getattr(response, "content", str(response))
-                
+
                 # Add a note about tool limitations
                 if any(keyword in prompt.lower() for keyword in ['file', 'read', 'analyze', 'code', 'project']):
                     content += "\n\n📝 Note: This model doesn't support tools for file access. For complete file analysis, consider using a tool-compatible model like llama3.1 or qwen2.5-coder."
-                
+
                 return content
             except Exception as e:
                 stream_text(f"❌ LLM error: {e}")
                 return f"Error: Unable to process query - {e}"
-        
+
         return "Agent not available: LangChain not installed or model not accessible"
 
 
-def create_agent(agent_id: str, config: Dict[str, Any]) -> DeepCoderAgent:
+def create_agent(agent_id: str, config: dict[str, Any]) -> DeepCoderAgent:
     return DeepCoderAgent(agent_id, config)
 
 

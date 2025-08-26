@@ -2,10 +2,8 @@
 Configuration management for DeepCoder
 """
 
-import os
-import json
-from typing import Dict, Any, List
 from pathlib import Path
+from typing import Any
 
 # Try to import yaml, fallback to JSON parsing if not available
 try:
@@ -21,28 +19,25 @@ class ConfigManager:
 
     Backwards compatible: if only models.yaml exists it is mapped into agents.
     """
-    
+
     def __init__(self, config_dir: str = None):
         if config_dir is None:
             # Default to config directory relative to this file
             self.config_dir = Path(__file__).parent
         else:
             self.config_dir = Path(config_dir)
-        
+
         self.agents_config = None
         self._load_agents_config()
-    
+
     def _load_agents_config(self):
         """Load agents configuration from YAML (or migrate from models)."""
         agents_file = self.config_dir / "agents.yaml"
         models_file = self.config_dir / "models.yaml"  # legacy
         try:
             target_file = agents_file if agents_file.exists() else models_file
-            with open(target_file, 'r', encoding='utf-8') as f:
-                if YAML_AVAILABLE:
-                    raw = yaml.safe_load(f)
-                else:
-                    raw = self._get_default_agents()
+            with open(target_file, encoding='utf-8') as f:
+                raw = yaml.safe_load(f) if YAML_AVAILABLE else self._get_default_agents()
             if raw and 'models' in raw and 'agents' not in raw:
                 raw = {'agents': raw['models']}
             self.agents_config = raw
@@ -52,7 +47,7 @@ class ConfigManager:
         except Exception as e:
             print(f"⚠️ Error parsing agents configuration: {e}")
             self.agents_config = self._get_default_agents()
-    
+
     def _get_default_agents(self):
         return {
             "agents": {
@@ -66,13 +61,13 @@ class ConfigManager:
             }
         }
 
-    def get_available_agents(self) -> Dict[str, Dict[str, Any]]:
+    def get_available_agents(self) -> dict[str, dict[str, Any]]:
         return self.agents_config.get("agents", {})
 
-    def get_agent_config(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_config(self, agent_name: str) -> dict[str, Any]:
         return self.get_available_agents().get(agent_name, {})
 
-    def list_agent_names(self) -> List[str]:
+    def list_agent_names(self) -> list[str]:
         return list(self.get_available_agents().keys())
 
     # Compatibility wrappers

@@ -7,10 +7,10 @@ single responsibility principle. Each integration handles communication
 with a specific external service.
 """
 
+from .agent_registry import AgentInfo, AgentRegistry, ModelAgentMatch
 from .base_integration import BaseIntegration
-from .ollama_integration import OllamaIntegration
 from .integration_manager import IntegrationManager
-from .agent_registry import AgentRegistry, AgentInfo, ModelAgentMatch
-from .model_config_reader import ModelConfigReader, ModelConfig
+from .model_config_reader import ModelConfig, ModelConfigReader
+from .ollama_integration import OllamaIntegration
 
 __all__ = ["BaseIntegration", "OllamaIntegration", "IntegrationManager", "AgentRegistry", "AgentInfo", "ModelAgentMatch", "ModelConfigReader", "ModelConfig"]

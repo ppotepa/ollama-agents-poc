@@ -1,8 +1,8 @@
 """Agent display and initialization utilities."""
 
-from src.utils.animations import stream_text, show_thinking_animation, progressive_reveal
 from src.config.settings import config_manager
 from src.core import registry as agent_registry
+from src.utils.animations import progressive_reveal, show_thinking_animation, stream_text
 
 
 def display_agent_info(agent_key, fast_menu: bool = False):

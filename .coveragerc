@@ -1,0 +1,77 @@
+[run]
+# Coverage configuration for test coverage analysis
+# Documentation: https://coverage.readthedocs.io/
+
+source = ["src", "main.py"]
+omit = [
+    # Test files
+    "test/*",
+    "*/test_*",
+    "*/*test*.py",
+    
+    # Virtual environment
+    "ollama-agents/*",
+    "*/.venv/*",
+    "*/venv/*",
+    
+    # Build and cache directories
+    "*/__pycache__/*",
+    "*/build/*",
+    "*/dist/*",
+    "*/.tox/*",
+    
+    # Configuration and setup files
+    "setup.py",
+    "conftest.py",
+    
+    # Debug and temporary files
+    "debug_*.py",
+    "analyze_*.py",
+    "fixed_*.py",
+    "*.py.bak",
+    
+    # Data and cache directories
+    "data/*",
+    "logs/*",
+    "models/*",
+    "*cache*",
+]
+
+[report]
+# Reporting options
+precision = 2
+show_missing = true
+skip_covered = false
+skip_empty = false
+
+# Output formats
+format = "term-missing"
+
+# Exclude lines from coverage
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+# Fail under this percentage
+fail_under = 70
+
+[html]
+directory = "htmlcov"
+title = "Ollama Agents Coverage Report"
+
+[xml]
+output = "coverage.xml"
+
+[json]
+output = "coverage.json"
+pretty_print = true

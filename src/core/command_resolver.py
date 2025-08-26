@@ -1,10 +1,9 @@
 """Command Resolver - Cognitive interpretation of user input to map to local commands."""
 
 import re
-from typing import Optional, Dict, Any, List, Tuple
-from pathlib import Path
-import importlib.util
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional
 
 
 @dataclass
@@ -13,25 +12,25 @@ class ResolvedCommand:
     command_name: str
     command_module: str
     command_class: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     confidence: float
     description: str
 
 
 class CommandResolver:
     """Resolves user input to appropriate commands from the commands folder."""
-    
+
     def __init__(self, commands_path: str = "src/commands"):
         """Initialize the command resolver.
-        
+
         Args:
             commands_path: Path to the commands folder
         """
         self.commands_path = Path(commands_path)
         self.command_patterns = self._build_command_patterns()
         self.available_commands = self._discover_commands()
-    
-    def _build_command_patterns(self) -> Dict[str, Dict[str, Any]]:
+
+    def _build_command_patterns(self) -> dict[str, dict[str, Any]]:
         """Build patterns for recognizing different types of commands."""
         return {
             "repository_analysis": {
@@ -109,8 +108,8 @@ class CommandResolver:
                 }
             }
         }
-    
-    def _discover_commands(self) -> List[str]:
+
+    def _discover_commands(self) -> list[str]:
         """Discover available commands in the commands folder."""
         commands = []
         if self.commands_path.exists():
@@ -118,25 +117,25 @@ class CommandResolver:
                 if item.is_dir() and not item.name.startswith('_'):
                     commands.append(item.name)
         return commands
-    
+
     def resolve(self, user_input: str) -> Optional[ResolvedCommand]:
         """Resolve user input to a command.
-        
+
         Args:
             user_input: The user's input text
-            
+
         Returns:
             ResolvedCommand if a match is found, None otherwise
         """
         user_input_lower = user_input.lower().strip()
-        
+
         best_match = None
         highest_confidence = 0.0
-        
+
         # Check each command pattern
-        for command_type, config in self.command_patterns.items():
+        for _command_type, config in self.command_patterns.items():
             confidence = self._calculate_confidence(user_input_lower, config["patterns"])
-            
+
             if confidence > highest_confidence:
                 highest_confidence = confidence
                 best_match = ResolvedCommand(
@@ -147,51 +146,51 @@ class CommandResolver:
                     confidence=confidence,
                     description=config["description"]
                 )
-        
+
         # Only return if confidence is above threshold
         if highest_confidence >= 0.3:  # 30% confidence threshold
             return best_match
-        
+
         return None
-    
-    def _calculate_confidence(self, user_input: str, patterns: List[str]) -> float:
+
+    def _calculate_confidence(self, user_input: str, patterns: list[str]) -> float:
         """Calculate confidence score for pattern matching."""
         max_score = 0.0
-        
+
         for pattern in patterns:
             if re.search(pattern, user_input, re.IGNORECASE):
                 # Base score for pattern match
                 score = 0.7
-                
+
                 # Boost score if it's a very specific match
                 if len(pattern) > 20:  # Longer patterns are more specific
                     score += 0.2
-                
+
                 # Boost score if the pattern covers a significant portion of input
                 pattern_words = len(pattern.split())
                 input_words = len(user_input.split())
                 if input_words > 0:
                     coverage = min(pattern_words / input_words, 1.0)
                     score += coverage * 0.1
-                
+
                 max_score = max(max_score, score)
-        
+
         return min(max_score, 1.0)  # Cap at 1.0
-    
+
     def _get_command_class_name(self, command_name: str) -> str:
         """Convert command name to class name."""
         # Convert snake_case to PascalCase
         parts = command_name.split('_')
         return ''.join(part.capitalize() for part in parts) + 'Command'
-    
-    def get_available_commands(self) -> List[str]:
+
+    def get_available_commands(self) -> list[str]:
         """Get list of available commands."""
         return self.available_commands.copy()
-    
+
     def explain_resolution(self, user_input: str) -> str:
         """Explain how the input would be resolved (for debugging)."""
         resolved = self.resolve(user_input)
-        
+
         if resolved:
             return (f"Input: '{user_input}'\n"
                    f"Resolved to: {resolved.command_name}\n"
@@ -200,11 +199,11 @@ class CommandResolver:
                    f"Parameters: {resolved.parameters}")
         else:
             return f"Input: '{user_input}'\nNo command resolution found (confidence too low)"
-    
-    def add_custom_pattern(self, command_name: str, pattern: str, description: str, 
-                          parameters: Dict[str, Any] = None) -> None:
+
+    def add_custom_pattern(self, command_name: str, pattern: str, description: str,
+                          parameters: dict[str, Any] = None) -> None:
         """Add a custom pattern for command resolution.
-        
+
         Args:
             command_name: Name of the command
             pattern: Regex pattern to match
@@ -213,7 +212,7 @@ class CommandResolver:
         """
         if parameters is None:
             parameters = {}
-        
+
         if command_name not in self.command_patterns:
             self.command_patterns[command_name] = {
                 "patterns": [],
@@ -221,7 +220,7 @@ class CommandResolver:
                 "description": description,
                 "parameters": parameters
             }
-        
+
         self.command_patterns[command_name]["patterns"].append(pattern)
 
 
@@ -245,7 +244,7 @@ def resolve_user_input(user_input: str) -> Optional[ResolvedCommand]:
 if __name__ == "__main__":
     # Test the command resolver
     resolver = CommandResolver()
-    
+
     test_inputs = [
         "analyze repository structure",
         "what language is this project using",
@@ -256,7 +255,7 @@ if __name__ == "__main__":
         "show me the project overview",
         "this is random text that should not match"
     ]
-    
+
     print("🧠 Command Resolver Test\n" + "="*50)
     for test_input in test_inputs:
         print(f"\n📝 Testing: '{test_input}'")

@@ -1,0 +1,57 @@
+# Ruff configuration for Ollama Agents project
+# Documentation: https://docs.astral.sh/ruff/
+
+line-length = 120
+target-version = "py39"
+
+# Directories to exclude from analysis
+exclude = [
+    ".git",
+    ".venv", 
+    "venv",
+    "ollama-agents",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".tox",
+    "build",
+    "dist",
+    "data",
+    "logs", 
+    "models",
+    "*.egg-info",
+    ".vs",
+    ".vscode",
+]
+
+[lint]
+# Enable specific rule categories
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings  
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie
+    "SIM",  # flake8-simplify
+]
+
+# Disable specific rules that might be too strict
+ignore = [
+    "E501",  # Line too long (handled by line-length setting)
+    "E402",  # Module level import not at top of file (sometimes needed)
+]
+
+# Allow fix for all fixable violations
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when they are prefixed with underscore
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+# Test files can be more relaxed
+"test/**/*.py" = ["D"]
+"**/test_*.py" = ["D"]

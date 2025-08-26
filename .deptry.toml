@@ -1,0 +1,74 @@
+[tool.deptry]
+# Deptry configuration for dependency analysis
+# Documentation: https://deptry.com/
+
+# Root directory for analysis
+root = "."
+
+# Python module/package to analyze
+sources = ["src", "main.py"]
+
+# Additional directories to include
+include_dirs = ["test"]
+
+# Patterns to ignore
+ignore_notebooks = true
+ignore_unused = [
+    # Core dependencies that might not be directly imported
+    "pip",
+    "setuptools",
+    "wheel",
+    # Ollama specific
+    "ollama",
+    # Testing dependencies
+    "pytest",
+    "pytest-cov",
+    "coverage",
+    # Development tools
+    "black",
+    "flake8",
+    "pylint",
+    "mypy",
+    # Optional dependencies
+    "colorama",  # For Windows console colors
+    "chardet",   # For encoding detection
+]
+
+ignore_missing = [
+    # System modules
+    "ctypes",
+    "winreg",
+    "msvcrt",
+    # Optional imports that might not be available
+    "langchain_ollama",
+    "langchain",
+    "requests",
+    # Local modules
+    "src",
+    "core",
+    "agents",
+    "tools",
+    "utils",
+    "config",
+    "integrations",
+    "interface",
+    "repository",
+]
+
+ignore_transitive = [
+    # Transitive dependencies we don't need to track
+    "certifi",
+    "charset-normalizer", 
+    "idna",
+    "urllib3",
+    "packaging",
+    "six",
+]
+
+# File patterns to skip
+skip_missing = true
+skip_unused = false
+skip_transitive = true
+
+# Requirements files to check against
+requirements_files = ["requirements.txt", "src/requirements.txt"]

@@ -1,6 +1,7 @@
 """Core enumerations for the agent system."""
 
-from enum import Enum, auto, Flag
+from enum import Enum, Flag, auto
+
 
 class ModelFamily(Enum):
     """Model architecture families."""
@@ -8,13 +9,13 @@ class ModelFamily(Enum):
     CODELLAMA = auto()
     TINYLLAMA = auto()
     QWEN = auto()
-    QWEN_CODER = auto() 
+    QWEN_CODER = auto()
     MISTRAL = auto()
     GEMMA = auto()
     PHI = auto()
     DEEPSEEK = auto()
     DEEPSEEK_CODER = auto()
-    
+
     @classmethod
     def from_name(cls, name: str) -> "ModelFamily":
         """Parse model family from name string."""
@@ -34,7 +35,7 @@ class ModelFamily(Enum):
         elif "tiny" in name:
             return cls.TINYLLAMA
         return cls.LLAMA  # Default
-    
+
 class Domain(Enum):
     """Model domain specialization."""
     GENERAL = auto()    # General purpose
@@ -42,7 +43,7 @@ class Domain(Enum):
     CHAT = auto()       # Chat optimized
     MATH = auto()       # Mathematics
     SCIENCE = auto()    # Scientific reasoning
-    
+
 class AgentCapability(Flag):
     """Agent capabilities as flag enum (can be combined)."""
     NONE = 0
@@ -53,18 +54,18 @@ class AgentCapability(Flag):
     SYSTEM = auto()           # System operations
     INTERNET = auto()         # Web search/fetch
     REPO_ANALYSIS = auto()    # Repository analysis
-    
+
     # Common combinations
     BASIC = STREAMING
     CODER = STREAMING | FUNCTION_CALLS | CODE | FILES | REPO_ANALYSIS
-    
+
     @classmethod
     def from_strings(cls, capability_strings):
         """Convert string capabilities to enum flags."""
         result = cls.NONE
         mapping = {
             "streaming": cls.STREAMING,
-            "function_calls": cls.FUNCTION_CALLS, 
+            "function_calls": cls.FUNCTION_CALLS,
             "tool_calls": cls.FUNCTION_CALLS,
             "code": cls.CODE,
             "coding": cls.CODE,
@@ -76,7 +77,7 @@ class AgentCapability(Flag):
             "repo": cls.REPO_ANALYSIS,
             "repository": cls.REPO_ANALYSIS
         }
-        
+
         # Handle both list and dict formats
         if isinstance(capability_strings, dict):
             for cap, enabled in capability_strings.items():
@@ -87,9 +88,9 @@ class AgentCapability(Flag):
                 cap_lower = cap.lower()
                 if cap_lower in mapping:
                     result |= mapping[cap_lower]
-        
+
         return result
-    
+
     def to_strings(self):
         """Convert flags to list of capability strings."""
         result = []
@@ -117,7 +118,7 @@ class ToolType(Enum):
     WEB = auto()            # Web operations
     REPO = auto()           # Repository operations
     UTILITY = auto()        # General utilities
-    
+
     @classmethod
     def for_tool(cls, tool_name: str) -> "ToolType":
         """Get tool type from name."""

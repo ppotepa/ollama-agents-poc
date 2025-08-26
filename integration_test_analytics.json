@@ -1,0 +1,132 @@
+{
+  "generation_time": "2025-08-26T15:12:43.540315",
+  "total_logs_analyzed": 2,
+  "execution_patterns": {
+    "execution_modes": {
+      "manual_test": 1,
+      "integration_test": 1
+    },
+    "step_distributions": [
+      2,
+      1
+    ],
+    "tool_sequences": [
+      [
+        "calculator"
+      ],
+      [
+        "code_generator"
+      ]
+    ],
+    "agent_switch_patterns": [
+      [
+        {
+          "from": "qwen2.5:7b-instruct-q4_K_M",
+          "to": "gemma:7b-instruct-q4_K_M",
+          "reason": "Better for verification tasks"
+        }
+      ]
+    ],
+    "context_evolution": {},
+    "prompt_decoration_patterns": {
+      "system_message": 2,
+      "instruction_prefix": 1,
+      "instruction_enhancement": 1,
+      "format_specification": 1
+    }
+  },
+  "context_usage": {
+    "sources": {
+      "user_input": 1,
+      "system_knowledge": 1,
+      "user_request": 1,
+      "task_analysis": 1
+    },
+    "size_distributions": [
+      25,
+      27,
+      62,
+      47
+    ],
+    "evolution_patterns": {},
+    "effectiveness_metrics": {
+      "average_context_size": 40.25,
+      "max_context_size": 62,
+      "min_context_size": 25,
+      "total_context_chars": 161
+    }
+  },
+  "tool_effectiveness": {
+    "usage_frequency": {
+      "calculator": 1,
+      "code_generator": 1
+    },
+    "success_rates": {
+      "calculator": {
+        "total": 1,
+        "successful": 1,
+        "success_rate": 1.0
+      },
+      "code_generator": {
+        "total": 1,
+        "successful": 1,
+        "success_rate": 1.0
+      }
+    },
+    "execution_times": {
+      "calculator": [
+        0.001
+      ],
+      "code_generator": [
+        0.1
+      ]
+    },
+    "follow_up_patterns": {
+      "code_generator": [
+        "syntax_checker",
+        "test_generator"
+      ]
+    },
+    "output_sizes": {
+      "calculator": [
+        1
+      ],
+      "code_generator": [
+        863
+      ]
+    }
+  },
+  "model_performance": {
+    "usage_frequency": {
+      "qwen2.5:7b-instruct-q4_K_M": 2,
+      "gemma:7b-instruct-q4_K_M": 1
+    },
+    "success_rates": {
+      "gemma:7b-instruct-q4_K_M": {
+        "total": 1,
+        "successful": 1,
+        "success_rate": 1.0
+      }
+    },
+    "execution_times": {
+      "qwen2.5:7b-instruct-q4_K_M": [
+        0.5,
+        0.15
+      ],
+      "gemma:7b-instruct-q4_K_M": [
+        0.3
+      ]
+    },
+    "switch_reasons": {
+      "gemma:7b-instruct-q4_K_M": [
+        "Better for verification tasks"
+      ]
+    },
+    "task_type_preferences": {}
+  },
+  "summary_metrics": {
+    "total_queries": 2,
+    "success_rate": 1.0,
+    "average_execution_time": 0.050837
+  }
+}

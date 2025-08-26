@@ -1,10 +1,13 @@
 """Code execution tools (safe sandboxed approximations)."""
 from __future__ import annotations
 
-import io, contextlib, textwrap
+import contextlib
+import io
+import textwrap
 
 try:
     from langchain.tools import StructuredTool
+
     from src.tools.registry import register_tool
     LANGCHAIN_AVAILABLE = True
 except Exception:  # pragma: no cover

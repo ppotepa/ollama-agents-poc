@@ -4,7 +4,6 @@ Extracted from deepcoder_interactive_stream.py for modular architecture
 """
 
 import time
-from typing import List
 
 # Fast mode flags (set via main CLI)
 FAST_ALL = False  # When True: disable character tokenization globally
@@ -46,16 +45,16 @@ def show_thinking_animation(duration: float = 2.0, message: str = "🔄 Thinking
     animation = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     end_time = time.time() + duration
     i = 0
-    
+
     while time.time() < end_time:
         print(f"\r{message} {animation[i % len(animation)]}", end='', flush=True)
         time.sleep(0.1)
         i += 1
-    
+
     print(f"\r{' ' * (len(message) + 5)}\r", end='', flush=True)  # Clear the line
 
 
-def progressive_reveal(sections: List[tuple], section_delay: float = 0.5):
+def progressive_reveal(sections: list[tuple], section_delay: float = 0.5):
     """Progressively reveal sections of text with animations."""
     for title, content in sections:
         stream_text(f"\n{title}", delay=0.05)

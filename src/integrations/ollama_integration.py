@@ -7,9 +7,10 @@ Follows single responsibility principle by focusing only on Ollama-specific oper
 """
 
 import os
-import time
 import subprocess
-from typing import List, Dict, Any, Optional
+import time
+from typing import Any, Optional
+
 import requests
 
 from .base_integration import BaseIntegration
@@ -18,29 +19,29 @@ from .base_integration import BaseIntegration
 class OllamaIntegration(BaseIntegration):
     """
     Integration class for Ollama service communication.
-    
+
     Responsibilities:
     - Discover available models from Ollama
     - Format model information for OpenAI compatibility
     - Handle connection errors gracefully
     - Provide fallback mechanisms
     """
-    
+
     def __init__(self, host: Optional[str] = None, timeout: int = 5):
         """
         Initialize Ollama integration.
-        
+
         Args:
             host: Ollama server host URL (defaults to OLLAMA_HOST env var or container default)
             timeout: Request timeout in seconds
         """
         self.host = host or os.getenv("OLLAMA_HOST", "http://ollama:11434")
         self.timeout = timeout
-    
-    def get_models(self) -> List[Dict[str, Any]]:
+
+    def get_models(self) -> list[dict[str, Any]]:
         """
         Fetch available models from Ollama server.
-        
+
         Returns:
             List of model dictionaries in OpenAI-compatible format
         """
@@ -51,7 +52,7 @@ class OllamaIntegration(BaseIntegration):
                 return models
         except Exception as e:
             print(f"Failed to fetch models via HTTP API: {e}")
-        
+
         try:
             # Fallback to CLI
             models = self._fetch_models_via_cli()
@@ -59,11 +60,11 @@ class OllamaIntegration(BaseIntegration):
                 return models
         except Exception as e:
             print(f"Failed to fetch models via CLI: {e}")
-        
+
         # Return default model if all methods fail
         return [self._get_default_model()]
-    
-    def _fetch_models_via_api(self) -> List[Dict[str, Any]]:
+
+    def _fetch_models_via_api(self) -> list[dict[str, Any]]:
         """Fetch models using Ollama HTTP API."""
         response = requests.get(f"{self.host}/api/tags", timeout=self.timeout)
         if response.status_code == 200:
@@ -71,13 +72,13 @@ class OllamaIntegration(BaseIntegration):
             models = data.get("models", [])
             return [self._format_model_from_api(model) for model in models]
         return []
-    
-    def _fetch_models_via_cli(self) -> List[Dict[str, Any]]:
+
+    def _fetch_models_via_cli(self) -> list[dict[str, Any]]:
         """Fetch models using Ollama CLI command."""
         result = subprocess.run(
-            ["ollama", "list"], 
-            capture_output=True, 
-            text=True, 
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
             timeout=10,
             encoding='utf-8',
             errors='replace'
@@ -85,16 +86,16 @@ class OllamaIntegration(BaseIntegration):
         if result.returncode == 0:
             return self._parse_cli_output(result.stdout)
         return []
-    
-    def _format_model_from_api(self, model_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _format_model_from_api(self, model_data: dict[str, Any]) -> dict[str, Any]:
         """Format model data from API response into OpenAI-compatible format."""
         model_name = model_data.get("name", "unknown")
         model_size = model_data.get("size", 0)
         modified_at = model_data.get("modified_at", "")
-        
+
         # Convert timestamp
         created_timestamp = self._parse_timestamp(modified_at) if modified_at else self._now()
-        
+
         return {
             "id": model_name,
             "object": "model",
@@ -120,12 +121,12 @@ class OllamaIntegration(BaseIntegration):
                 "parameter_size": model_data.get("details", {}).get("parameter_size", "Unknown")
             }
         }
-    
-    def _parse_cli_output(self, output: str) -> List[Dict[str, Any]]:
+
+    def _parse_cli_output(self, output: str) -> list[dict[str, Any]]:
         """Parse 'ollama list' command output into model list."""
         models = []
         lines = output.strip().split('\n')
-        
+
         # Skip header line if present
         for line in lines[1:] if len(lines) > 1 else lines:
             if line.strip():
@@ -133,10 +134,10 @@ class OllamaIntegration(BaseIntegration):
                 if parts:
                     model_name = parts[0]
                     size = parts[2] if len(parts) > 2 else "Unknown"
-                    
+
                     models.append({
                         "id": model_name,
-                        "object": "model", 
+                        "object": "model",
                         "created": self._now(),
                         "owned_by": "ollama",
                         "permission": [],
@@ -158,9 +159,9 @@ class OllamaIntegration(BaseIntegration):
                             "family": self._guess_model_family(model_name),
                         }
                     })
-        
+
         return models if models else [self._get_default_model()]
-    
+
     def _format_size(self, size_bytes: int) -> str:
         """Format model size in bytes to human readable format."""
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -168,11 +169,11 @@ class OllamaIntegration(BaseIntegration):
                 return f"{size_bytes:.1f}{unit}"
             size_bytes /= 1024.0
         return f"{size_bytes:.1f}PB"
-    
+
     def _guess_model_family(self, model_name: str) -> str:
         """Guess model family from model name."""
         name_lower = model_name.lower()
-        
+
         if "deepseek" in name_lower:
             return "deepseek-coder" if "coder" in name_lower else "deepseek"
         elif "llama" in name_lower:
@@ -189,19 +190,19 @@ class OllamaIntegration(BaseIntegration):
             return "tinyllama"
         else:
             return "unknown"
-    
+
     def _parse_timestamp(self, timestamp_str: str) -> int:
         """Parse ISO timestamp string to Unix timestamp."""
         try:
             return int(time.mktime(time.strptime(timestamp_str[:19], "%Y-%m-%dT%H:%M:%S")))
         except (ValueError, TypeError):
             return self._now()
-    
+
     def _now(self) -> int:
         """Get current Unix timestamp."""
         return int(time.time())
-    
-    def _get_default_model(self) -> Dict[str, Any]:
+
+    def _get_default_model(self) -> dict[str, Any]:
         """Return a default model when Ollama is not available."""
         return {
             "id": "deepseek-agent",
@@ -228,11 +229,11 @@ class OllamaIntegration(BaseIntegration):
                 "status": "fallback - ollama not available"
             }
         }
-    
+
     def is_available(self) -> bool:
         """
         Check if Ollama service is available.
-        
+
         Returns:
             True if Ollama is reachable, False otherwise
         """
@@ -241,11 +242,11 @@ class OllamaIntegration(BaseIntegration):
             return response.status_code == 200
         except Exception:
             return False
-    
+
     def get_version(self) -> Optional[str]:
         """
         Get Ollama version information.
-        
+
         Returns:
             Version string if available, None otherwise
         """

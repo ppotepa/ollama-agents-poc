@@ -6,9 +6,6 @@ Includes:
 """
 from __future__ import annotations
 
-import json, textwrap
-from typing import List
-
 try:
     import requests  # type: ignore
 except Exception:  # pragma: no cover
@@ -16,6 +13,7 @@ except Exception:  # pragma: no cover
 
 try:
     from langchain.tools import StructuredTool
+
     from src.tools.registry import register_tool
     LANGCHAIN_AVAILABLE = True
 except Exception:  # pragma: no cover
@@ -46,7 +44,7 @@ def duck_search(query: str, max_results: int = 5) -> str:
     try:
         # Preferred fast API (library)
         from duckduckgo_search import DDGS  # type: ignore
-        results: List[dict] = []
+        results: list[dict] = []
         with DDGS() as ddgs:  # pragma: no branch
             for r in ddgs.text(query, max_results=max_results):  # type: ignore
                 if not r:

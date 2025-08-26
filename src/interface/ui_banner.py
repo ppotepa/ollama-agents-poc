@@ -1,7 +1,7 @@
 """UI banner and agent listing functionality."""
 
-from src.utils.animations import stream_text
 from src.config.settings import config_manager
+from src.utils.animations import stream_text
 
 
 def _emit(text: str, delay: float = 0.02, newline: bool = True, fast_menu: bool = False):
@@ -20,7 +20,7 @@ def display_banner(fast_menu: bool = False):
         "🚀 Choose your AI model and start coding!",
         "=" * 60
     ]
-    
+
     for line in banner_lines:
         _emit(line, delay=0.02, fast_menu=fast_menu)
 
@@ -44,10 +44,14 @@ def display_agent_list(fast_menu: bool = False):
         _emit(f"   📝 {desc}", delay=0.005, fast_menu=fast_menu)
         cap = cfg.get("capabilities", {})
         icons = []
-        if cap.get("coding"): icons.append("💻 Coding")
-        if cap.get("file_operations"): icons.append("📁 Files")
-        if cap.get("streaming"): icons.append("⚡ Streaming")
-        if cap.get("general_qa"): icons.append("💬 Q&A")
+        if cap.get("coding"):
+            icons.append("💻 Coding")
+        if cap.get("file_operations"):
+            icons.append("📁 Files")
+        if cap.get("streaming"):
+            icons.append("⚡ Streaming")
+        if cap.get("general_qa"):
+            icons.append("💬 Q&A")
         if icons:
             _emit(f"   🎯 {' | '.join(icons)}", delay=0.005, fast_menu=fast_menu)
         ordered.append(key)
@@ -58,19 +62,19 @@ def get_user_choice(agent_keys, fast_menu: bool = False):
     """Interactive selection from list of agent keys."""
     while True:
         try:
-            _emit(f"\n🔘 Choose an agent (1-{len(agent_keys)}) or 'q' to quit: ", 
+            _emit(f"\n🔘 Choose an agent (1-{len(agent_keys)}) or 'q' to quit: ",
                   delay=0.01, newline=False, fast_menu=fast_menu)
             choice = input().strip().lower()
-            
+
             if choice == 'q' or choice == 'quit':
                 return None
-            
+
             choice_num = int(choice)
             if 1 <= choice_num <= len(agent_keys):
                 return agent_keys[choice_num - 1]
             else:
                 _emit(f"❌ Enter a number between 1 and {len(agent_keys)}", fast_menu=fast_menu)
-                
+
         except ValueError:
             _emit("❌ Please enter a valid number or 'q' to quit", fast_menu=fast_menu)
         except KeyboardInterrupt:

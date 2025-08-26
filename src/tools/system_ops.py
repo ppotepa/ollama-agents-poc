@@ -1,10 +1,13 @@
 """System tools."""
 from __future__ import annotations
 
-import platform, os, shutil
+import os
+import platform
+import shutil
 
 try:
     from langchain.tools import StructuredTool
+
     from src.tools.registry import register_tool
     LANGCHAIN_AVAILABLE = True
 except Exception:

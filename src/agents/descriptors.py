@@ -1,12 +1,11 @@
 """Decorator-based agent descriptor system."""
 
-from typing import List, Optional, Type, Dict, Any, Callable, Set, TypeVar, TYPE_CHECKING
-from functools import wraps
+from typing import TYPE_CHECKING, Callable, Optional, TypeVar
 
-from src.core.enums import ModelFamily, Domain, AgentCapability, ToolType
+from src.core.enums import AgentCapability, Domain, ModelFamily, ToolType
 
 if TYPE_CHECKING:
-    from src.agents.base.base_agent import BaseAgent
+    pass
 
 # Base Agent Type
 T = TypeVar('T')
@@ -20,25 +19,25 @@ def AgentDescriptor(
     description: Optional[str] = None,
     family: Optional[ModelFamily] = None,
     domain: Optional[Domain] = None,
-) -> Callable[[Type[T]], Type[T]]:
+) -> Callable[[type[T]], type[T]]:
     """Main agent decorator defining basic properties."""
-    def decorator(cls: Type[T]) -> Type[T]:
+    def decorator(cls: type[T]) -> type[T]:
         cls._agent_name = name
         cls._backend_image = backend_image
         cls._description = description
         cls._family = family or ModelFamily.from_name(backend_image)
         cls._domain = domain
-        
+
         # Generate ID from name
         agent_id = name.lower().replace(" ", "_").replace(":", "_")
         _registry[agent_id] = cls
-        
+
         # Add descriptor accessor methods
         @property
         def requires_repository(self):
-            return (self._domain == Domain.CODING or 
+            return (self._domain == Domain.CODING or
                    (hasattr(self, '_capabilities') and AgentCapability.CODE in self._capabilities))
-        
+
         cls.requires_repository = requires_repository
         return cls
     return decorator
@@ -80,7 +79,7 @@ def get_agent_class(agent_id):
 def list_agents():
     """Get all registered agents with metadata."""
     result = {}
-    
+
     for agent_id, agent_cls in _registry.items():
         result[agent_id] = {
             "name": getattr(agent_cls, "_agent_name", agent_id),
