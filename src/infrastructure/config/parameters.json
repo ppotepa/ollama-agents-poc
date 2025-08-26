@@ -1,0 +1,149 @@
+{
+  "version": "1.0",
+  "arguments": {
+    "agent": {
+      "type": "str",
+      "help": "Directly specify agent to use",
+      "dest": "agent"
+    },
+    "model": {
+      "type": "str",
+      "help": "(Deprecated) specify model (alias of --agent)",
+      "dest": "agent"
+    },
+    "list-agents": {
+      "action": "store_true",
+      "help": "List available agents"
+    },
+    "list-models": {
+      "action": "store_true",
+      "help": "List models with agent implementation status"
+    },
+    "list-all": {
+      "action": "store_true", 
+      "help": "List all available models from integrations"
+    },
+    "create-models-config": {
+      "action": "store_true",
+      "help": "Create a sample models.txt configuration file"
+    },
+    "config-dir": {
+      "type": "str",
+      "help": "Configuration directory path"
+    },
+    "-q": {
+      "type": "str",
+      "help": "Initial query for the agent (skips to chat)",
+      "dest": "query",
+      "metavar": "QUERY"
+    },
+    "query": {
+      "type": "str",
+      "help": "Initial query for the agent (skips to chat)",
+      "dest": "query"
+    },
+    "--no-tools": {
+      "action": "store_true",
+      "help": "Disable all tools (run in LLM-only mode)",
+      "dest": "no_tools"
+    },
+    "-g": {
+      "type": "str",
+      "help": "Git repository URL (required for coding agents)",
+      "dest": "git_repo",
+      "metavar": "REPO_URL"
+    },
+    "git-repo": {
+      "type": "str",
+      "help": "Git repository URL (required for coding agents)",
+      "dest": "git_repo"
+    },
+    "-f": {
+      "action": "store_true",
+      "help": "Fast menus: skip tokenized output for menus",
+      "dest": "fast"
+    },
+    "-fa": {
+      "action": "store_true",
+      "help": "Fast all: disable tokenization & streaming everywhere",
+      "dest": "fast_all"
+    },
+    "interception-mode": {
+      "type": "str",
+      "default": "smart",
+      "choices": ["full", "lightweight", "smart"],
+      "help": "Prompt interception mode: 'full' (complete analysis), 'lightweight' (fast minimal context), 'smart' (adaptive)",
+      "dest": "interception_mode"
+    },
+    "stream": {
+      "action": "store_true",
+      "help": "Force streaming output (bypasses server mode for real-time response)",
+      "dest": "force_streaming"
+    },
+    "server": {
+      "action": "store_true",
+      "help": "Run API server (replaces start_server scripts)"
+    },
+    "host": {
+      "type": "str",
+      "default": "0.0.0.0",
+      "help": "Server host (with --server)"
+    },
+    "port": {
+      "type": "int",
+      "default": 8000,
+      "help": "Server port (with --server)"
+    },
+    "verbose": {
+      "action": "store_true",
+      "help": "Enable verbose output and debugging information"
+    },
+    "-v": {
+      "action": "store_true",
+      "help": "Enable verbose output (alias for --verbose)",
+      "dest": "verbose"
+    },
+    "connection-mode": {
+      "type": "str",
+      "default": "hybrid",
+      "choices": ["direct", "request", "hybrid"],
+      "help": "Connection mode: 'direct' (temporary server), 'request' (existing server), 'hybrid' (try request then direct)",
+      "dest": "connection_mode"
+    },
+    "collaborative": {
+      "action": "store_true",
+      "help": "Enable collaborative mode with iterative agent back-and-forth processing",
+      "dest": "collaborative"
+    },
+    "max-iterations": {
+      "type": "int",
+      "default": 5,
+      "help": "Maximum number of collaborative iterations (default: 5)",
+      "dest": "max_iterations"
+    },
+    "intelligent": {
+      "action": "store_true",
+      "help": "Enable intelligent investigation mode with dynamic model switching",
+      "dest": "intelligent_investigation"
+    }
+  },
+  "subcommands": {
+    "repo": {
+      "help": "Repository operations",
+      "arguments": {
+        "analyze": {
+          "action": "store_true",
+          "help": "Analyze repository structure"
+        },
+        "clone": {
+          "action": "store_true",
+          "help": "Clone repository locally"
+        },
+        "path": {
+          "type": "str",
+          "help": "Path to clone repository to"
+        }
+      }
+    }
+  }
+}

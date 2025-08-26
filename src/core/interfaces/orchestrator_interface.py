@@ -141,3 +141,40 @@ class ExecutionManagerInterface(ABC):
             Error result
         """
         pass
+
+
+# ---------------------------------------------------------------------------
+# Backwards compatibility data structures
+#
+# The original orchestrator implementation used an ``ExecutionSession``
+# dataclass to track the state of a long-running query execution.  During
+# refactoring this type was removed from the interface layer, but some
+# orchestrator implementations still reference it.  To avoid import errors
+# and provide a minimal contract, we define a simple ``ExecutionSession``
+# here.
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class ExecutionSession:
+    """Minimal session representation for orchestrator implementations.
+
+    Attributes:
+        session_id: Unique identifier for the session.
+        query: The original query being executed.
+        mode: Optional execution mode (e.g. "single", "collaborative").
+        metadata: Arbitrary metadata associated with the session.
+        status: Current status of the session.
+        result: Optional result produced by the session.
+        error: Optional error message if the session failed.
+    """
+
+    session_id: str
+    query: str
+    mode: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    status: str = "initializing"
+    result: Optional[str] = None
+    error: Optional[str] = None

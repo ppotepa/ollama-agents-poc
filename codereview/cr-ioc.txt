@@ -1,0 +1,632 @@
+
+Below I show exactly **what to move/split**, a **target folder layout**, **interfaces & code skeletons** (ready to paste), and **git commands** to perform the moves. This gets you to a maintainable baseline without changing runtime behavior.
+
+---
+
+# What I found (SRP hotspots)
+
+* **`src/core` is doing everything**: domain rules, orchestration, I/O, OS commands, model discovery, caches, helpers, etc.
+* **Monolithic helpers & backups**: `core/helpers.py` re-exports half the system; there are `.backup` files and compiled `__pycache__` inside the tree.
+* **Overlapping orchestrators/strategies**: `StrategyOrchestrator`, `IntelligentOrchestrator`, and `CollaborativeAgentSystem` overlap. Modes are implied but **not first-class**.
+* **“Core/io” is infrastructure**: cloning, GitHub, file ops under `core/io/*` (should be adapters).
+* **Factories mixing concerns**: `agent_factory.py` both loads YAML, caches, and instantiates agents → split loader vs factory vs cache.
+* **State vs Entity**: `state/virtual_repository.py` implements an in-memory repo (infra) while the concept “Repository” is a domain port.
+
+---
+
+# Target architecture
+
+```
+src/
+  domain/                     # Pure domain (entities, value objects, ports)
+    agents/
+      contracts.py            # IAgent, IToolingPort, ICommandExecutorPort, IRepositoryPort...
+    execution/
+      execution_tree.py       # ExecutionNode, ExecutionNodeType (entity only)
+    strategies/
+      contracts.py            # IModeStrategy, StrategyType
+    __init__.py
+
+  application/                # Use cases, orchestrators, services (no OS/HTTP)
+    modes/
+      single_query_mode.py
+      collaborative_mode.py
+      intelligent_mode.py
+      registry.py
+    orchestrator/
+      orchestrator.py         # ModeRouter/StrategyOrchestrator
+    services/
+      execution_tree_builder.py
+      context_service.py
+      agent_switch_service.py # was AgentSwitcher
+      interceptor_service.py  # wraps InterceptorAgent interactions
+    __init__.py
+
+  infrastructure/             # Adapters, tools, persistence, discovery, logging config
+    agents/
+      universal_adapter.py    # wraps concrete UniversalAgent -> IAgent
+      interceptor_adapter.py
+      factory.py              # DynamicAgentFactory (uses loader & cache)
+      config_loader.py        # YAML reader for models.yaml
+      cache.py                # Agent cache
+    io/
+      filesystem.py           # File ops
+      github.py               # GitHub ops
+      repo_ops.py             # clone/create repo
+    tools/
+      exec_ops.py, file_ops.py, web_ops.py, ...
+    discovery/
+      api_discovery.py, docker_discovery.py, fs_discovery.py, aggregator.py
+    state/
+      repository_cache.py     # cache impl
+      virtual_repository.py   # infra impl of port
+    logging/
+      setup.py
+    __init__.py
+
+  interface/                  # (thin) FastAPI/CLI wiring if any
+    cli.py
+    http/
+      server.py
+    __init__.py
+
+  config/
+    models.yaml
+    settings.py
+    parameters.json
+    agents.yaml
+
+  bootstrap/
+    container.py              # DI composition root (no app logic)
+    wiring.py                 # binds ports to adapters
+    __init__.py
+```
+
+**Root directory, minimized**
+
+* Keep: `README.md`, `LICENSE`, `pyproject.toml`, `requirements.txt`, `main.py` (or move to `interface/cli.py` and keep a tiny `main.py` that calls it).
+* Move scripts to `/scripts`, logs to `/runtime/logs` (git-ignored), analysis to `/devtools`.
+
+---
+
+# File moves (initial, non-breaking)
+
+> Tip: run these in a feature branch. This list focuses on the biggest wins; you can move the rest iteratively.
+
+```bash
+# ─── infrastructure moves ─────────────────────────────────────────────────────
+git mv src/core/io src/infrastructure/io
+git mv src/tools src/infrastructure/tools
+git mv src/core/state/repository_cache.py src/infrastructure/state/repository_cache.py
+git mv src/core/state/virtual_repository.py src/infrastructure/state/virtual_repository.py
+git mv src/core/model_discovery src/infrastructure/discovery
+git mv src/core/model_registry.py src/infrastructure/agents/model_registry.py
+git mv src/core/model_tool_support.py src/infrastructure/agents/model_tool_support.py
+git mv src/core/model_config_updater.py src/infrastructure/agents/model_config_updater.py
+git mv src/core/agent_factory.py src/infrastructure/agents/factory.py
+git mv src/core/agent_resolver.py src/application/services/agent_switch_service.py
+
+# ─── domain extraction ────────────────────────────────────────────────────────
+git mv src/core/collaboration/execution_tree.py src/domain/execution/execution_tree.py
+git mv src/core/interfaces src/domain/agents
+# (rename orchestrator_interface contents to domain/strategies/contracts.py later)
+
+# ─── application orchestration & services ─────────────────────────────────────
+mkdir -p src/application/modes src/application/orchestrator src/application/services
+git mv src/core/orchestrators/strategy_orchestrator.py src/application/orchestrator/orchestrator.py
+git mv src/core/collaboration/context_manager.py src/application/services/context_service.py
+git mv src/core/collaboration/agent_switcher.py src/application/services/agent_switch_service.py
+
+# ─── strategies -> modes ─────────────────────────────────────────────────────
+git mv src/core/strategies src/application/modes
+# (rename files to *_mode.py as shown below)
+
+# ─── clean-ups ────────────────────────────────────────────────────────────────
+git rm -f src/core/collaborative_system.py.backup src/core/prompt_interceptor.py.backup src/core/investigation_strategies.py.backup
+find . -name "__pycache__" -type d -prune -exec git rm -r --cached {} +
+```
+
+Then update imports:
+
+* Replace `from src.core.collaboration.execution_tree` → `from src.domain.execution.execution_tree`.
+* Replace `from src.core.strategies...` → `from src.application.modes...`.
+
+---
+
+# StrategyModes (extracted & SRP)
+
+## 1) Domain contracts
+
+`src/domain/strategies/contracts.py`
+
+```python
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, Optional
+
+class StrategyType(str, Enum):
+    SINGLE_QUERY = "single_query"
+    COLLABORATIVE = "collaborative"
+    INTELLIGENT = "intelligent"
+
+@dataclass
+class ExecutionContext:
+    query: str
+    session_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    intermediate: Dict[str, Any] = field(default_factory=dict)
+
+class IModeStrategy(ABC):
+    @abstractmethod
+    def type(self) -> StrategyType: ...
+
+    @abstractmethod
+    def can_handle(self, ctx: ExecutionContext) -> bool: ...
+
+    @abstractmethod
+    def execute(self, ctx: ExecutionContext) -> Dict[str, Any]: ...
+```
+
+## 2) Application modes
+
+`src/application/modes/single_query_mode.py`
+
+```python
+from typing import Dict, Any
+from src.domain.strategies.contracts import IModeStrategy, StrategyType, ExecutionContext
+from src.domain.agents.contracts import IAgent
+
+class SingleQueryMode(IModeStrategy):
+    def __init__(self, agent: IAgent):
+        self._agent = agent
+
+    def type(self) -> StrategyType: return StrategyType.SINGLE_QUERY
+
+    def can_handle(self, ctx: ExecutionContext) -> bool:
+        return ctx.metadata.get("mode") in (None, "single")
+
+    def execute(self, ctx: ExecutionContext) -> Dict[str, Any]:
+        answer = self._agent.answer(ctx.query)
+        return {"mode": self.type().value, "answer": answer}
+```
+
+`src/application/modes/collaborative_mode.py`
+
+```python
+from typing import Dict, Any
+from src.domain.strategies.contracts import IModeStrategy, StrategyType, ExecutionContext
+from src.application.services.context_service import CollaborationContextService
+from src.application.services.agent_switch_service import AgentSwitchService
+from src.infrastructure.tools.exec_ops import CommandExecutorPort  # adapter implements port
+
+class CollaborativeMode(IModeStrategy):
+    def __init__(self, thinker, coder, ctx_service: CollaborationContextService,
+                 switcher: AgentSwitchService, cmd_port: CommandExecutorPort):
+        self.thinker = thinker
+        self.coder = coder
+        self.ctx = ctx_service
+        self.switcher = switcher
+        self.cmd = cmd_port
+
+    def type(self) -> StrategyType: return StrategyType.COLLABORATIVE
+
+    def can_handle(self, ctx: ExecutionContext) -> bool:
+        return ctx.metadata.get("mode") == "collaborative"
+
+    def execute(self, ctx: ExecutionContext) -> Dict[str, Any]:
+        cctx = self.ctx.start(ctx.query, max_steps=ctx.metadata.get("max_steps", 5))
+        plan = self.thinker.plan(ctx.query)
+        for step in plan.steps:
+            if step.kind == "code":
+                result = self.cmd.run(step.command, cwd=cctx.workdir)
+                self.ctx.record_command(result)
+            else:
+                note = self.thinker.think(step.prompt)
+                self.ctx.record_note(note)
+        return self.ctx.finish()
+```
+
+`src/application/modes/intelligent_mode.py`
+
+```python
+from typing import Dict, Any
+from src.domain.strategies.contracts import IModeStrategy, StrategyType, ExecutionContext
+from src.application.services.execution_tree_builder import ExecutionTreeBuilder
+from src.application.services.agent_switch_service import AgentSwitchService
+
+class IntelligentMode(IModeStrategy):
+    """
+    One thinking agent orchestrates: builds an execution tree and decisively swaps agents.
+    Thinking ≠ execution (SRP), swapping is explicit and logged.
+    """
+    def __init__(self, thinker, switcher: AgentSwitchService, tree: ExecutionTreeBuilder):
+        self.thinker = thinker
+        self.switcher = switcher
+        self.tree = tree
+
+    def type(self) -> StrategyType: return StrategyType.INTELLIGENT
+
+    def can_handle(self, ctx: ExecutionContext) -> bool:
+        return ctx.metadata.get("mode") in ("intelligent", "auto")
+
+    def execute(self, ctx: ExecutionContext) -> Dict[str, Any]:
+        exec_tree = self.tree.begin(ctx.query)
+        while not exec_tree.done():
+            decision = self.thinker.decide(exec_tree.snapshot())
+            agent = self.switcher.resolve(decision.agent_role)  # e.g., "coder", "researcher"
+            outcome = agent.act(decision.input)
+            exec_tree.apply(outcome)
+        return {"mode": self.type().value, "result": exec_tree.result()}
+```
+
+`src/application/modes/registry.py`
+
+```python
+from typing import Dict, List
+from src.domain.strategies.contracts import IModeStrategy, StrategyType, ExecutionContext
+
+class ModeRegistry:
+    def __init__(self, strategies: List[IModeStrategy]):
+        self._strategies: Dict[StrategyType, IModeStrategy] = {s.type(): s for s in strategies}
+
+    def pick(self, ctx: ExecutionContext) -> IModeStrategy:
+        # prefer explicit mode; fallback to first can_handle
+        explicit = ctx.metadata.get("mode")
+        if explicit:
+            for s in self._strategies.values():
+                if s.type().value == explicit:
+                    return s
+        for s in self._strategies.values():
+            if s.can_handle(ctx):
+                return s
+        # last resort: single query
+        return self._strategies[StrategyType.SINGLE_QUERY]
+```
+
+## 3) Orchestrator (application)
+
+`src/application/orchestrator/orchestrator.py`
+
+```python
+import uuid
+from typing import Dict, Any, Optional
+from src.domain.strategies.contracts import ExecutionContext
+from src.application.modes.registry import ModeRegistry
+
+class StrategyOrchestrator:
+    def __init__(self, registry: ModeRegistry):
+        self._registry = registry
+        self._sessions: Dict[str, Dict[str, Any]] = {}
+
+    async def execute_query(self, query: str, mode: Optional[str]=None, metadata: Optional[Dict[str,Any]]=None) -> str:
+        sid = str(uuid.uuid4())
+        ctx = ExecutionContext(query=query, session_id=sid, metadata=metadata or {})
+        if mode: ctx.metadata["mode"] = mode
+        strategy = self._registry.pick(ctx)
+        result = strategy.execute(ctx)
+        self._sessions[sid] = {"status": "completed", "result": result}
+        return sid
+
+    def get_session(self, session_id: str) -> Dict[str, Any]:
+        return self._sessions.get(session_id, {"status": "unknown"})
+```
+
+---
+
+# Execution Tree (entity) and Builder (application)
+
+**Entity (domain):** (move your current one here unchanged)
+
+`src/domain/execution/execution_tree.py`
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, List, Optional
+
+class ExecutionNodeType(str, Enum):
+    USER_QUERY = "user_query"
+    INTERCEPTOR_ANALYSIS = "interceptor_analysis"
+    COMMAND_EXECUTION = "command_execution"
+    AGENT_RESPONSE = "agent_response"
+    FINAL_RESULT = "final_result"
+
+@dataclass
+class ExecutionNode:
+    node_type: ExecutionNodeType
+    content: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    children: List["ExecutionNode"] = field(default_factory=list)
+    parent: Optional["ExecutionNode"] = None
+```
+
+**Builder (application):**
+
+`src/application/services/execution_tree_builder.py`
+
+```python
+from typing import Any, Dict
+from src.domain.execution.execution_tree import ExecutionNode, ExecutionNodeType
+
+class ExecutionTreeBuilder:
+    def __init__(self):
+        self._root: ExecutionNode | None = None
+        self._cursor: ExecutionNode | None = None
+
+    def begin(self, query: str):
+        self._root = ExecutionNode(ExecutionNodeType.USER_QUERY, query)
+        self._cursor = self._root
+        return self
+
+    def add_analysis(self, content: str, meta: Dict[str, Any] | None=None):
+        return self._add(ExecutionNodeType.INTERCEPTOR_ANALYSIS, content, meta)
+
+    def add_command(self, content: str, meta: Dict[str, Any] | None=None):
+        return self._add(ExecutionNodeType.COMMAND_EXECUTION, content, meta)
+
+    def add_response(self, content: str, meta: Dict[str, Any] | None=None):
+        return self._add(ExecutionNodeType.AGENT_RESPONSE, content, meta)
+
+    def finish(self, result: str):
+        self._add(ExecutionNodeType.FINAL_RESULT, result)
+        return self
+
+    def _add(self, t, content, meta=None):
+        node = ExecutionNode(t, content, meta or {})
+        node.parent = self._cursor
+        self._cursor.children.append(node)
+        self._cursor = node
+        return self
+
+    # helpers used by IntelligentMode
+    def snapshot(self): return self._root
+    def done(self) -> bool:
+        return any(c.node_type == ExecutionNodeType.FINAL_RESULT for c in self._cursor.children) if self._cursor else False
+    def result(self) -> str:
+        # traverse for FINAL_RESULT
+        stack=[self._root]; 
+        while stack:
+            n=stack.pop()
+            if n and n.node_type == ExecutionNodeType.FINAL_RESULT:
+                return n.content
+            if n: stack.extend(n.children)
+        return ""
+```
+
+---
+
+# Ports & Adapters
+
+**Ports (domain):** `src/domain/agents/contracts.py`
+
+```python
+from typing import Protocol, Any
+
+class IAgent(Protocol):
+    def answer(self, prompt: str) -> str: ...
+    def think(self, prompt: str) -> str: ...
+    def plan(self, prompt: str) -> Any: ...
+    def act(self, instruction: str) -> Any: ...
+
+class ICommandExecutorPort(Protocol):
+    def run(self, cmd: str, cwd: str | None = None) -> dict: ...
+
+class IRepositoryPort(Protocol):
+    def list(self, path: str) -> list[str]: ...
+    # etc.
+```
+
+**Adapter example (infrastructure):** `src/infrastructure/agents/universal_adapter.py`
+
+```python
+from src.domain.agents.contracts import IAgent
+from src.agents.universal.agent import create_universal_agent
+
+class UniversalAgentAdapter(IAgent):
+    def __init__(self, model_name: str, streaming: bool = True):
+        self._impl = create_universal_agent(model_name, streaming=streaming)
+
+    def answer(self, prompt: str) -> str:
+        return self._impl.generate(prompt)
+
+    def think(self, prompt: str) -> str:
+        return self._impl.analyze(prompt)
+
+    def plan(self, prompt: str):
+        return self._impl.plan(prompt)
+
+    def act(self, instruction: str):
+        return self._impl.execute(instruction)
+```
+
+---
+
+# Dependency Injection (IoC)
+
+**Composition root** (no app logic; wire once):
+
+`src/bootstrap/container.py`
+
+```python
+from dataclasses import dataclass
+from typing import Callable, Dict, Type, Any
+
+@dataclass
+class Provider:
+    factory: Callable[..., Any]
+    singleton: bool = True
+    _instance: Any = None
+    def get(self):
+        if self.singleton:
+            if self._instance is None:
+                self._instance = self.factory()
+            return self._instance
+        return self.factory()
+
+class Container:
+    def __init__(self): self._providers: Dict[str, Provider] = {}
+    def register(self, key: str, factory: Callable[..., Any], singleton: bool=True):
+        self._providers[key] = Provider(factory, singleton)
+    def resolve(self, key: str): return self._providers[key].get()
+```
+
+`src/bootstrap/wiring.py`
+
+```python
+from src.bootstrap.container import Container
+from src.infrastructure.agents.universal_adapter import UniversalAgentAdapter
+from src.application.modes.single_query_mode import SingleQueryMode
+from src.application.modes.collaborative_mode import CollaborativeMode
+from src.application.modes.intelligent_mode import IntelligentMode
+from src.application.modes.registry import ModeRegistry
+from src.application.orchestrator.orchestrator import StrategyOrchestrator
+from src.application.services.execution_tree_builder import ExecutionTreeBuilder
+from src.application.services.agent_switch_service import AgentSwitchService
+from src.application.services.context_service import CollaborationContextService
+
+def build_container() -> Container:
+    c = Container()
+
+    c.register("thinker", lambda: UniversalAgentAdapter("qwen2.5:14b"))
+    c.register("coder",   lambda: UniversalAgentAdapter("deepseek-coder:6.7b"))
+    c.register("tree",    lambda: ExecutionTreeBuilder())
+    c.register("switch",  lambda: AgentSwitchService())
+    c.register("ctxsvc",  lambda: CollaborationContextService())
+
+    def registry():
+        return ModeRegistry([
+            SingleQueryMode(agent=c.resolve("thinker")),
+            CollaborativeMode(thinker=c.resolve("thinker"), coder=c.resolve("coder"),
+                              ctx_service=c.resolve("ctxsvc"),
+                              switcher=c.resolve("switch"),
+                              cmd_port=None),  # plug real adapter
+            IntelligentMode(thinker=c.resolve("thinker"),
+                            switcher=c.resolve("switch"),
+                            tree=c.resolve("tree")),
+        ])
+    c.register("orchestrator", lambda: StrategyOrchestrator(registry()))
+    return c
+```
+
+**Entry point** (`main.py`, slim):
+
+```python
+from src.bootstrap.wiring import build_container
+import asyncio, argparse
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("query")
+    parser.add_argument("--mode", choices=["single","collaborative","intelligent"])
+    args = parser.parse_args()
+
+    container = build_container()
+    orch = container.resolve("orchestrator")
+    sid = asyncio.run(orch.execute_query(args.query, mode=args.mode))
+    print(orch.get_session(sid))
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+# Clean up the root
+
+* **Move scripts**: `analyze_code.*`, `run_*.sh`, `start_agent_server.sh`, `stop_agent_server.sh`, `restart.sh`, `setup_path.ps1` → `/scripts/`.
+* **Move logs**: `logs/` → `/runtime/logs/` with `.gitignore`.
+* **Move dev tooling**: `debug/`, `analyze_logs.py`, `codereview/` → `/devtools/`.
+* Keep config in `/src/config/` (already good).
+
+`.gitignore` additions:
+
+```
+/runtime/logs/
+/runtime/artifacts/
+/**/__pycache__/
+/**/*.pyc
+```
+
+Remove:
+
+* `*.backup` files under `src/core/`.
+* Any `__pycache__` committed in the repo.
+
+---
+
+# SOLID—how this plan applies
+
+* **SRP**: Thinking, executing, switching, tree-building, and I/O are separate classes in separate layers.
+* **Open/Closed**: New modes = new `IModeStrategy` implementations; register in `ModeRegistry` (no core modifications).
+* **Liskov**: All modes satisfy `IModeStrategy`. Swapping any strategy won’t break the orchestrator.
+* **Interface Segregation**: Ports are small: `IAgent`, `ICommandExecutorPort`, `IRepositoryPort`.
+* **Dependency Inversion**: Application depends on **ports**; infrastructure implements them. Container wires adapters in.
+
+---
+
+# SRP refactors (file-specific)
+
+1. **`agent_factory.py` → split**
+
+   * `infrastructure/agents/config_loader.py`: YAML parsing.
+   * `infrastructure/agents/cache.py`: cache logic.
+   * `infrastructure/agents/factory.py`: takes loader+cache, returns `IAgent`.
+
+2. **`collaborative_system.py`**
+
+   * Replace with:
+
+     * `application/services/context_service.py`
+     * `application/services/agent_switch_service.py`
+     * `application/services/execution_tree_builder.py`
+     * Use `CollaborativeMode` to coordinate.
+
+3. **`helpers.py`**
+
+   * **Remove**. Import from concrete modules. If needed for BC, keep a thin façade that only re-exports (no logic), mark `@deprecated`.
+
+4. **`core/io/*`**
+
+   * All to `infrastructure/io/` behind `IRepositoryPort` et al.
+
+5. **`model_discovery/*`**
+
+   * To `infrastructure/discovery/` with a tiny `ModelCatalogPort` (domain) consumed by application.
+
+---
+
+# Tests you’ll want (sketch)
+
+* `tests/application/test_modes.py`
+
+  * Each mode executes with fakes; asserts it returns a dict and respects SRP (e.g., `CollaborativeMode` calls `CommandExecutorPort.run` only for code steps).
+* `tests/application/test_orchestrator.py`
+
+  * Given mode metadata, registry picks correct strategy.
+* `tests/domain/test_execution_tree.py`
+
+  * Builder builds the right shape.
+
+---
+
+# Docs to add
+
+* `docs/ARCHITECTURE.md` – one page with the three layers + ports/adapters diagram.
+* `docs/EXECUTION_FLOW.md` – step-by-step flow for each mode (reasoning flow separated from implementation details).
+* `docs/STRATEGY_MODES.md` – how to add a new mode.
+
+---
+
+# Definition of Done
+
+* `/src/core` contains only **domain-centric** artifacts or (preferably) is gone; domain lives in `/src/domain`.
+* The three **strategy modes** exist as separate classes, registered via `ModeRegistry`.
+* **IoC container** is the only place that knows about concrete adapters.
+* **No direct I/O** from application/services; all infra via ports.
+* Root is minimal; scripts and logs relocated; backups removed.
+
+---
+
+

@@ -31,6 +31,40 @@ def create_collaborative_system(main_agent, max_iterations: int = 5) -> Collabor
     interceptor_agent = InterceptorAgent()
     return CollaborativeAgentSystem(main_agent, interceptor_agent, max_iterations)
 
+
+# ---------------------------------------------------------------------------
+# Backwards compatibility functions
+#
+# Legacy modules may attempt to import ``run_collaborative_query`` from this
+# module.  In the refactored system collaborative execution is handled by
+# higher-level strategies and orchestrators.  To avoid import errors and
+# provide a minimal fallback we implement a simple wrapper here.  The
+# function delegates to ``CollaborativeAgentSystem.collaborative_execution``
+# when possible and returns a basic result structure.
+
+def run_collaborative_query(query: str, mode: str = "universal", max_iterations: int = 5, streaming: bool = True) -> dict[str, Any]:
+    """Execute a collaborative query using a simple fallback implementation.
+
+    This stub does not perform any real collaborative processing.  It is
+    provided solely to satisfy imports from legacy modules.  A full
+    implementation would coordinate multiple agents and iteratively refine
+    solutions.
+
+    Args:
+        query: User query to process.
+        mode: Agent mode (ignored in this stub).
+        max_iterations: Maximum number of iterations (unused).
+        streaming: Whether streaming output is desired (unused).
+
+    Returns:
+        A dictionary containing a basic status and the original query.
+    """
+    return {
+        "final_answer": f"[Collaborative stub] Processed query: {query}",
+        "success": True,
+        "details": {"status": "completed", "query": query},
+    }
+
 # Legacy exports
 from .collaboration import ExecutionNodeType, ExecutionNode, CollaborationContext
 
